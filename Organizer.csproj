@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+	<OutputType>WinExe</OutputType>
+	<TargetFramework>net10.0-windows7.0</TargetFramework>
+	<UseWindowsForms>true</UseWindowsForms>
+	<ImplicitUsings>enable</ImplicitUsings>
+	<Nullable>enable</Nullable>
+	<AssemblyTitle>Forest City Software</AssemblyTitle>
+	<Authors>Dave Brewster &amp; AI</Authors>
+	<Company>Forest City Software</Company>
+	<Copyright>Forest City Software</Copyright>
+	<Description>Forest City Software's version of Organizer.</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <CheckForOverflowUnderflow>True</CheckForOverflowUnderflow>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <CheckForOverflowUnderflow>True</CheckForOverflowUnderflow>
+  </PropertyGroup>
+
+  <ItemGroup>
+	<Compile Remove="Organizer.Tests\**\*.cs" />
+	<Compile Remove="Organizer.Tests/**/*.cs" />
+	<EmbeddedResource Remove="Organizer.Tests\**\*" />
+	<EmbeddedResource Remove="Organizer.Tests/**/*" />
+	<None Remove="Organizer.Tests\**\*" />
+	<None Remove="Organizer.Tests/**/*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Organizer.Tests\Organizer.Tests.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="Properties\Settings.Designer.cs">
+      <DesignTimeSharedInput>True</DesignTimeSharedInput>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Settings.settings</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Properties\Settings.settings">
+      <Generator>SettingsSingleFileGenerator</Generator>
+      <LastGenOutput>Settings.Designer.cs</LastGenOutput>
+    </None>
+  </ItemGroup>
+
+</Project>

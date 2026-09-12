@@ -1,9 +1,19 @@
 # Organizer
 
-This project is an attempt to duplicate the functionality of the defunct program IBM Lotus Organizer.
-The last version of the program was 2003. It contains a lot of functionality such as categories and costing that I never used so at this time they are low priority.
-The program was a personal information that included a calendar, to-do list, and contact manager.
-I have only scratch the surface of some functionality.
-One thing I am hoping for, is to find someone to work the UI. I can work on the functionality but can't draw a staight line with a ruler.
+## Project Overview
 
-I have included the installation routine for the original IBM Lotus Organizer. Use it for reference.
+This project is an attempt to recreate the functionality of the now-defunct IBM Lotus Organizer, whose final release was in 2003.
+
+Lotus Organizer included a wide range of features, such as categories, activity costing, and other advanced personal information management tools. Many of those features were not part of my personal workflow, so they are currently considered lower-priority items for implementation.
+
+At its core, the application is intended to be a personal information manager (PIM) that includes:
+
+* Calendar management
+* To-do/task tracking
+* Contact management
+
+Development is still in its early stages, and only a portion of the overall functionality has been implemented so far.
+
+One area where I would particularly appreciate assistance is the user interface design. My focus is primarily on implementing functionality and application logic, while UI/UX design is not one of my strengths. Contributions related to layout, styling, usability, and overall visual design would be especially welcome.
+
+For reference purposes, I have included the installation files for the original IBM Lotus Organizer. These files are provided to help contributors better understand the look, feel, and functionality of the original application.

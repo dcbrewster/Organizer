@@ -4,12 +4,8 @@ namespace Organizer;
 
 internal sealed class CalendarPlannerView : Control
 {
-    private const int StartHour = 6;
-    private const int EndHour = 22;
     private const int TimeGutter = 0;
     private const int DayHeaderHeight = 28;
-    private const int TaskStripHeight = 74;
-
     private readonly Dictionary<Rectangle, CalendarEvent> _eventBounds = [];
     private readonly Dictionary<Rectangle, OrganizerTask> _taskBounds = [];
     private readonly Font _smallFont;

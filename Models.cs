@@ -1,5 +1,9 @@
 namespace Organizer;
 
+/// <summary>
+/// Represents the data structure for the organizer application, including events, contacts, tasks,
+/// notes, anniversaries, and user preferences.
+/// </summary>
 public sealed class OrganizerData
 {
     public List<CalendarEvent> Events { get; set; } = [];
@@ -10,6 +14,9 @@ public sealed class OrganizerData
     public OrganizerPreferences Preferences { get; set; } = new();
 }
 
+/// <summary>
+/// Represents the user preferences for the organizer application, including settings for web browser,
+/// </summary>
 public sealed class OrganizerPreferences
 {
     public string WebBrowser { get; set; } = "System default";
@@ -43,6 +50,9 @@ public sealed class OrganizerPreferences
     public int MarginBottom { get; set; } = 100;
 }
 
+/// <summary>
+/// Represents a calendar event in the organizer application, including details such as title, start and end times,
+/// </summary>
 public sealed class CalendarEvent
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -67,6 +77,10 @@ public sealed class CalendarEvent
     public string Notes { get; set; } = string.Empty;
 }
 
+/// <summary>
+/// Represents a contact in the organizer application, including details such as name, company, email,
+/// phone number, address, and notes.
+/// </summary>
 public sealed class Contact
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -79,6 +93,10 @@ public sealed class Contact
     public string Notes { get; set; } = string.Empty;
 }
 
+/// <summary>
+/// Represents a task in the organizer application, including details such as title, due date, completion status,
+/// priority, repeat settings, and notes.
+/// </summary>
 public sealed class OrganizerTask
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -91,6 +109,9 @@ public sealed class OrganizerTask
     public string Notes { get; set; } = string.Empty;
 }
 
+/// <summary>
+/// Represents a note in the organizer application, including details such as title, body, update timestamp,
+/// </summary>
 public sealed class Note
 {
     public Guid Id { get; set; } = Guid.NewGuid();

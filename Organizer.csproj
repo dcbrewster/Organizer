@@ -11,6 +11,8 @@
 	<Company>Forest City Software</Company>
 	<Copyright>Forest City Software</Copyright>
 	<Description>Forest City Software's version of Organizer.</Description>
+	<ApplicationIcon>ForestCitySoftware.ico</ApplicationIcon>
+	<PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
@@ -31,6 +33,17 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Remove="About\Contributors.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="About\Contributors.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="ForestCitySoftware.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="Organizer.Tests\Organizer.Tests.csproj" />
   </ItemGroup>
 
@@ -46,6 +59,10 @@
     <None Update="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>
+    </None>
+    <None Update="README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
     </None>
   </ItemGroup>
 

@@ -41,13 +41,21 @@ public sealed partial class MainForm
         designerToolStrip = new ToolStrip();
         designerTabs = new TabControl();
         designerCalendarTab = new TabPage();
+        designerCalendarLeftPanel = new Panel();
+        designerTrashPanel = new Panel();
+        designerTrashLabel = new Label();
+        designerNavigationPanel = new FlowLayoutPanel();
+        designerPreviousButton = new Button();
+        designerNextButton = new Button();
+        designerMonthCalendar = new MonthCalendar();
         designerAnniversaryTab = new TabPage();
         designerContactsTab = new TabPage();
         designerNotepadTab = new TabPage();
-        designerTrashPanel = new Panel();
-        designerTrashLabel = new Label();
         designerTabs.SuspendLayout();
+        designerCalendarTab.SuspendLayout();
+        designerCalendarLeftPanel.SuspendLayout();
         designerTrashPanel.SuspendLayout();
+        designerNavigationPanel.SuspendLayout();
         SuspendLayout();
         // 
         // designerMenuStrip
@@ -82,6 +90,7 @@ public sealed partial class MainForm
         // 
         // designerCalendarTab
         // 
+        designerCalendarTab.Controls.Add(designerCalendarLeftPanel);
         designerCalendarTab.Location = new Point(4, 4);
         designerCalendarTab.Name = "designerCalendarTab";
         designerCalendarTab.Size = new Size(1069, 585);
@@ -134,6 +143,65 @@ public sealed partial class MainForm
         designerTrashLabel.Text = "🗑";
         designerTrashLabel.TextAlign = ContentAlignment.MiddleCenter;
         // 
+        // designerNavigationPanel
+        // 
+        designerNavigationPanel.Controls.Add(designerPreviousButton);
+        designerNavigationPanel.Controls.Add(designerNextButton);
+        designerNavigationPanel.Dock = DockStyle.Top;
+        designerNavigationPanel.Location = new Point(8, 170);
+        designerNavigationPanel.Name = "designerNavigationPanel";
+        designerNavigationPanel.Padding = new Padding(8);
+        designerNavigationPanel.Size = new Size(244, 48);
+        designerNavigationPanel.TabIndex = 1;
+        // 
+        // designerPreviousButton
+        // 
+        designerPreviousButton.Location = new Point(11, 11);
+        designerPreviousButton.Name = "designerPreviousButton";
+        designerPreviousButton.Size = new Size(44, 23);
+        designerPreviousButton.TabIndex = 0;
+        designerPreviousButton.Text = "<";
+        // 
+        // designerNextButton
+        // 
+        designerNextButton.Location = new Point(61, 11);
+        designerNextButton.Name = "designerNextButton";
+        designerNextButton.Size = new Size(44, 23);
+        designerNextButton.TabIndex = 1;
+        designerNextButton.Text = ">";
+        // 
+        // designerMonthCalendar
+        // 
+        designerMonthCalendar.Dock = DockStyle.Top;
+        designerMonthCalendar.Location = new Point(8, 8);
+        designerMonthCalendar.MaxSelectionCount = 1;
+        designerMonthCalendar.Name = "designerMonthCalendar";
+        designerMonthCalendar.TabIndex = 0;
+        // 
+        // designerAnniversaryTab
+        // 
+        designerAnniversaryTab.Location = new Point(4, 4);
+        designerAnniversaryTab.Name = "designerAnniversaryTab";
+        designerAnniversaryTab.Size = new Size(1069, 643);
+        designerAnniversaryTab.TabIndex = 1;
+        designerAnniversaryTab.Text = "Anniversary";
+        // 
+        // designerContactsTab
+        // 
+        designerContactsTab.Location = new Point(4, 4);
+        designerContactsTab.Name = "designerContactsTab";
+        designerContactsTab.Size = new Size(1069, 643);
+        designerContactsTab.TabIndex = 2;
+        designerContactsTab.Text = "Contacts";
+        // 
+        // designerNotepadTab
+        // 
+        designerNotepadTab.Location = new Point(4, 4);
+        designerNotepadTab.Name = "designerNotepadTab";
+        designerNotepadTab.Size = new Size(1069, 643);
+        designerNotepadTab.TabIndex = 3;
+        designerNotepadTab.Text = "Notepad";
+        // 
         // MainForm
         // 
         AutoScaleDimensions = new SizeF(7F, 15F);
@@ -147,10 +215,16 @@ public sealed partial class MainForm
         Name = "MainForm";
         Text = "Organizer";
         designerTabs.ResumeLayout(false);
+        designerCalendarTab.ResumeLayout(false);
+        designerCalendarLeftPanel.ResumeLayout(false);
         designerTrashPanel.ResumeLayout(false);
+        designerNavigationPanel.ResumeLayout(false);
         ResumeLayout(false);
         PerformLayout();
     }
 
     #endregion
+
+    private Panel designerTrashPanel;
+    private Label designerTrashLabel;
 }

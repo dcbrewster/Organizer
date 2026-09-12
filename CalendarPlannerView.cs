@@ -73,6 +73,7 @@ internal sealed class CalendarPlannerView : Control
         if(!SelectCalendarItemAt(e.Location))
         {
             EmptyAreaDoubleClicked?.Invoke(this, EventArgs.Empty);
+
             return;
         }
 
@@ -88,12 +89,12 @@ internal sealed class CalendarPlannerView : Control
         _eventBounds.Clear();
         _taskBounds.Clear();
 
-        using var borderPen = new Pen(Color.FromArgb(174, 139, 72));
-        using var lightPen = new Pen(Color.FromArgb(226, 206, 154));
-        using var headerBrush = new SolidBrush(Color.FromArgb(244, 222, 163));
-        using var paperBrush = new SolidBrush(Color.FromArgb(255, 253, 239));
+        using Pen? borderPen = new(Color.FromArgb(174, 139, 72));
+        using Pen? lightPen = new(Color.FromArgb(226, 206, 154));
+        using SolidBrush? headerBrush = new (Color.FromArgb(244, 222, 163));
+        using SolidBrush? paperBrush = new (Color.FromArgb(255, 253, 239));
 
-        var page = ClientRectangle;
+        Rectangle page = ClientRectangle;
         page.Inflate(-10, -10);
 
         if(page.Width <= 0 || page.Height <= 0) return;
@@ -101,7 +102,7 @@ internal sealed class CalendarPlannerView : Control
         e.Graphics.FillRectangle(paperBrush, page);
         e.Graphics.DrawRectangle(borderPen, page);
 
-        var content = Rectangle.Inflate(page, -18, -16);
+        Rectangle content = Rectangle.Inflate(page, -18, -16);
 
         switch(ViewMode)
         {
@@ -121,7 +122,7 @@ internal sealed class CalendarPlannerView : Control
 
     private bool SelectCalendarItemAt(Point location)
     {
-        foreach(var pair in _eventBounds)
+        foreach(KeyValuePair<Rectangle, CalendarEvent> pair in _eventBounds)
         {
             if(!pair.Key.Contains(location)) continue;
 
@@ -129,10 +130,11 @@ internal sealed class CalendarPlannerView : Control
             _selectedTask = null;
             EventSelected?.Invoke(this, pair.Value);
             Invalidate();
+
             return true;
         }
 
-        foreach(var pair in _taskBounds)
+        foreach(KeyValuePair<Rectangle, OrganizerTask> pair in _taskBounds)
         {
             if(!pair.Key.Contains(location)) continue;
 
@@ -140,6 +142,7 @@ internal sealed class CalendarPlannerView : Control
             _selectedTask = pair.Value;
             TaskSelected?.Invoke(this, pair.Value);
             Invalidate();
+
             return true;
         }
 
@@ -150,95 +153,87 @@ internal sealed class CalendarPlannerView : Control
         return false;
     }
 
-    private void DrawBinderRings(Graphics graphics, Rectangle page)
-    {
-        using var ringPen = new Pen(Color.FromArgb(155, 126, 74), 2f);
-
-        var x = page.Left + 14;
-        var ringHeight = 28;
-
-        for(var i = 0; i < 4; i++)
-        {
-            var y = page.Top + page.Height * (i + 1) / 5 - ringHeight / 2;
-            graphics.DrawArc(ringPen, x - 12, y, 24, ringHeight, 90, 180);
-        }
-    }
-
     private void DrawDay(Graphics graphics, Rectangle bounds, Brush headerBrush, Pen borderPen, Pen lightPen)
     {
-        var header = new Rectangle(bounds.Left, bounds.Top, bounds.Width, 42);
+        Rectangle header = new(bounds.Left, bounds.Top, bounds.Width, 42);
+
         graphics.FillRectangle(headerBrush, header);
         TextRenderer.DrawText(graphics, SelectedDate.ToString("dddd, MMMM d, yyyy"), _boldFont, header, ForeColor, TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter);
 
-        var body = new Rectangle(bounds.Left, header.Bottom, bounds.Width, bounds.Height - header.Height);
-        var days = new[] { SelectedDate.Date };
-        var timeGrid = new Rectangle(body.Left, body.Top, body.Width, body.Height);
+        Rectangle body = new(bounds.Left, header.Bottom, bounds.Width, bounds.Height - header.Height);
+        DateTime[]? days = [SelectedDate.Date];
+        Rectangle timeGrid = new(body.Left, body.Top, body.Width, body.Height);
+
         DrawTimeGrid(graphics, timeGrid, 1, days, lightPen, borderPen);
         DrawCalendarItems(graphics, timeGrid, days);
     }
 
     private void DrawWeek(Graphics graphics, Rectangle bounds, Brush headerBrush, Pen borderPen, Pen lightPen)
     {
-        var start = StartOfWeek(SelectedDate);
-        var days = Enumerable.Range(0, 7).Select(dayOffset => start.AddDays(dayOffset)).ToArray();
-        var title = new Rectangle(bounds.Left, bounds.Top, bounds.Width, 32);
+        DateTime start = StartOfWeek(SelectedDate);
+        DateTime[]? days = Enumerable.Range(0, 7).Select(dayOffset => start.AddDays(dayOffset)).ToArray();
+        Rectangle title = new(bounds.Left, bounds.Top, bounds.Width, 32);
+
         graphics.FillRectangle(headerBrush, title);
         graphics.DrawRectangle(borderPen, title);
         TextRenderer.DrawText(graphics, $"Week of {start:MMMM d, yyyy}", _boldFont, title, ForeColor, TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter);
 
-        var body = new Rectangle(bounds.Left, title.Bottom, bounds.Width, bounds.Height - title.Height);
-        var timeGrid = new Rectangle(body.Left, body.Top, body.Width, body.Height);
+        Rectangle body = new(bounds.Left, title.Bottom, bounds.Width, bounds.Height - title.Height);
+        Rectangle timeGrid = new(body.Left, body.Top, body.Width, body.Height);
+
         DrawTimeGrid(graphics, timeGrid, 7, days, lightPen, borderPen);
         DrawCalendarItems(graphics, timeGrid, days);
     }
 
     private void DrawMonth(Graphics graphics, Rectangle bounds, Brush headerBrush, Pen borderPen, Pen lightPen)
     {
-        var title = new Rectangle(bounds.Left, bounds.Top, bounds.Width, 36);
+        Rectangle title = new(bounds.Left, bounds.Top, bounds.Width, 36);
+
         graphics.FillRectangle(headerBrush, title);
         graphics.DrawRectangle(borderPen, title);
         TextRenderer.DrawText(graphics, SelectedDate.ToString("MMMM yyyy"), _boldFont, title, ForeColor, TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter);
 
-        var grid = new Rectangle(bounds.Left, title.Bottom, bounds.Width, bounds.Height - title.Height);
-        var dayHeaderHeight = 26;
-        var dayNames = new[] { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
-        var colWidth = grid.Width / 7;
+        Rectangle grid = new(bounds.Left, title.Bottom, bounds.Width, bounds.Height - title.Height);
+        const int dayHeaderHeight = 26;
+        string[]? dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+        int colWidth = grid.Width / 7;
 
-        for(var column = 0; column < 7; column++)
+        for(int column = 0; column < 7; column++)
         {
-            var header = new Rectangle(grid.Left + column * colWidth, grid.Top, column == 6 ? grid.Right - (grid.Left + column * colWidth) : colWidth, dayHeaderHeight);
+            Rectangle header = new(grid.Left + column * colWidth, grid.Top, column == 6 ? grid.Right - (grid.Left + column * colWidth) : colWidth, dayHeaderHeight);
+
             graphics.FillRectangle(headerBrush, header);
             graphics.DrawRectangle(borderPen, header);
             TextRenderer.DrawText(graphics, dayNames[column], _boldFont, header, ForeColor, TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter);
         }
 
-        var first = new DateTime(SelectedDate.Year, SelectedDate.Month, 1);
-        var firstVisible = StartOfWeek(first);
-        var cellTop = grid.Top + dayHeaderHeight;
-        var rowHeight = Math.Max(1, (grid.Height - dayHeaderHeight) / 6);
+        DateTime first = new(SelectedDate.Year, SelectedDate.Month, 1);
+        DateTime firstVisible = StartOfWeek(first);
+        int cellTop = grid.Top + dayHeaderHeight;
+        int rowHeight = Math.Max(1, (grid.Height - dayHeaderHeight) / 6);
 
-        for(var row = 0; row < 6; row++)
+        for(int row = 0; row < 6; row++)
         {
-            for(var column = 0; column < 7; column++)
+            for(int column = 0; column < 7; column++)
             {
-                var day = firstVisible.AddDays(row * 7 + column);
-                var x = grid.Left + column * colWidth;
-                var cell = new Rectangle(x, cellTop + row * rowHeight, column == 6 ? grid.Right - x : colWidth, row == 5 ? grid.Bottom - (cellTop + row * rowHeight) : rowHeight);
-                var inMonth = day.Month == SelectedDate.Month;
+                DateTime day = firstVisible.AddDays(row * 7 + column);
+                int x = grid.Left + column * colWidth;
+                Rectangle cell = new (x, cellTop + row * rowHeight, column == 6 ? grid.Right - x : colWidth, row == 5 ? grid.Bottom - (cellTop + row * rowHeight) : rowHeight);
+                bool inMonth = day.Month == SelectedDate.Month;
 
-                using var cellBrush = new SolidBrush(day.Date == SelectedDate.Date ? Color.FromArgb(255, 241, 180) : inMonth ? Color.FromArgb(255, 253, 239) : Color.FromArgb(239, 232, 211));
+                using SolidBrush? cellBrush = new (day.Date == SelectedDate.Date ? Color.FromArgb(255, 241, 180) : inMonth ? Color.FromArgb(255, 253, 239) : Color.FromArgb(239, 232, 211));
                 graphics.FillRectangle(cellBrush, cell);
                 graphics.DrawRectangle(lightPen, cell);
 
                 TextRenderer.DrawText(graphics, day.Day.ToString(), inMonth ? _boldFont : _smallFont, new Rectangle(cell.Left + 4, cell.Top + 3, cell.Width - 8, 18), inMonth ? ForeColor : Color.Gray, TextFormatFlags.Left);
 
-                var tasks = Tasks.Where(task => TaskOccursOnDate(task, day.Date)).OrderBy(TaskPriority).ThenBy(task => task.Completed).ThenBy(task => task.Title).Take(4).ToList();
-                var events = Events.Where(calendarEvent => calendarEvent.Start.Date == day.Date).OrderBy(calendarEvent => calendarEvent.Start).Take(4 - tasks.Count).ToList();
-                var y = cell.Top + 24;
+                List<OrganizerTask>? tasks = Tasks.Where(task => TaskOccursOnDate(task, day.Date)).OrderBy(TaskPriority).ThenBy(task => task.Completed).ThenBy(task => task.Title).Take(4).ToList();
+                List<CalendarEvent>? events = Events.Where(calendarEvent => calendarEvent.Start.Date == day.Date).OrderBy(calendarEvent => calendarEvent.Start).Take(4 - tasks.Count).ToList();
+                int y = cell.Top + 24;
 
-                foreach(var task in tasks)
+                foreach(OrganizerTask task in tasks)
                 {
-                    var taskRect = new Rectangle(cell.Left + 4, y, cell.Width - 8, 18);
+                    Rectangle taskRect = new (cell.Left + 4, y, cell.Width - 8, 18);
 
                     DrawTaskBlock(graphics, taskRect, task);
                     y += 20;
@@ -246,7 +241,7 @@ internal sealed class CalendarPlannerView : Control
 
                 foreach(var calendarEvent in events)
                 {
-                    var eventRect = new Rectangle(cell.Left + 4, y, cell.Width - 8, 18);
+                    Rectangle eventRect = new (cell.Left + 4, y, cell.Width - 8, 18);
 
                     DrawEventBlock(graphics, eventRect, calendarEvent, $"{calendarEvent.Start:h:mm} {calendarEvent.Title}");
                     y += 20;
@@ -259,90 +254,56 @@ internal sealed class CalendarPlannerView : Control
 
     private void DrawTimeGrid(Graphics graphics, Rectangle body, int dayCount, DateTime[] days, Pen lightPen, Pen borderPen)
     {
-        var timeline = new Rectangle(body.Left, body.Top + DayHeaderHeight, body.Width, body.Height - DayHeaderHeight);
-        var columnWidth = Math.Max(1, (body.Width - TimeGutter) / dayCount);
+        Rectangle timeline = new(body.Left, body.Top + DayHeaderHeight, body.Width, body.Height - DayHeaderHeight);
+        int columnWidth = Math.Max(1, (body.Width - TimeGutter) / dayCount);
 
         graphics.DrawRectangle(borderPen, new Rectangle(body.Left, body.Top, body.Width - 1, DayHeaderHeight - 1));
-        using var headerBrush = new SolidBrush(Color.FromArgb(248, 231, 183));
+        using SolidBrush? headerBrush = new(Color.FromArgb(248, 231, 183));
         graphics.FillRectangle(headerBrush, new Rectangle(body.Left, body.Top, body.Width, DayHeaderHeight));
 
-        for(var dayIndex = 0; dayIndex < dayCount; dayIndex++)
+        for(int dayIndex = 0; dayIndex < dayCount; dayIndex++)
         {
-            var x = body.Left + TimeGutter + dayIndex * columnWidth;
-            var width = dayIndex == dayCount - 1 ? body.Right - x : columnWidth;
-            var header = new Rectangle(x, body.Top, width, DayHeaderHeight);
+            int x = body.Left + TimeGutter + dayIndex * columnWidth;
+            int width = dayIndex == dayCount - 1 ? body.Right - x : columnWidth;
+            Rectangle header = new(x, body.Top, width, DayHeaderHeight);
+
             TextRenderer.DrawText(graphics, dayCount == 1 ? "Appointments" : days[dayIndex].ToString("ddd M/d"), _boldFont, header, ForeColor, TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter);
-        }
-    }
-
-    private void DrawTaskStrip(Graphics graphics, Rectangle bounds, DateTime[] days, Pen lightPen, Pen borderPen)
-    {
-        graphics.DrawRectangle(borderPen, bounds);
-        var dayCount = days.Length;
-        var columnWidth = Math.Max(1, (bounds.Width - TimeGutter) / dayCount);
-
-        using var labelBrush = new SolidBrush(Color.FromArgb(248, 231, 183));
-        graphics.FillRectangle(labelBrush, new Rectangle(bounds.Left, bounds.Top, TimeGutter, bounds.Height));
-        TextRenderer.DrawText(graphics, "Tasks", _boldFont, new Rectangle(bounds.Left + 4, bounds.Top, TimeGutter - 8, bounds.Height), Color.FromArgb(94, 80, 52), TextFormatFlags.Right | TextFormatFlags.VerticalCenter);
-        graphics.DrawLine(borderPen, bounds.Left + TimeGutter, bounds.Top, bounds.Left + TimeGutter, bounds.Bottom);
-
-        for(var dayIndex = 0; dayIndex < dayCount; dayIndex++)
-        {
-            var day = days[dayIndex];
-            var x = bounds.Left + TimeGutter + dayIndex * columnWidth;
-            var width = dayIndex == dayCount - 1 ? bounds.Right - x : columnWidth;
-            var y = bounds.Top + 5;
-
-            if(dayIndex > 0)
-            {
-                graphics.DrawLine(borderPen, x, bounds.Top, x, bounds.Bottom);
-            }
-
-            foreach(var task in Tasks.Where(task => TaskOccursOnDate(task, day.Date)).OrderBy(TaskPriority).ThenBy(task => task.Completed).ThenBy(task => task.Title).Take(3))
-            {
-                var taskRect = new Rectangle(x + 5, y, Math.Max(20, width - 10), 20);
-                DrawTaskBlock(graphics, taskRect, task);
-                y += 22;
-            }
-
-            if(!Tasks.Any(task => TaskOccursOnDate(task, day.Date)))
-            {
-                graphics.DrawLine(lightPen, x, bounds.Top, x + width, bounds.Top);
-            }
         }
     }
 
     private void DrawCalendarItems(Graphics graphics, Rectangle body, DateTime[] days)
     {
-        var timeline = new Rectangle(body.Left, body.Top + DayHeaderHeight, body.Width, body.Height - DayHeaderHeight);
-        var dayCount = days.Length;
-        var columnWidth = Math.Max(1, (body.Width - TimeGutter) / dayCount);
+        Rectangle timeline = new(body.Left, body.Top + DayHeaderHeight, body.Width, body.Height - DayHeaderHeight);
+        int dayCount = days.Length;
+        int columnWidth = Math.Max(1, (body.Width - TimeGutter) / dayCount);
 
-        for(var dayIndex = 0; dayIndex < dayCount; dayIndex++)
+        for(int dayIndex = 0; dayIndex < dayCount; dayIndex++)
         {
-            var day = days[dayIndex];
-            var x = body.Left + TimeGutter + dayIndex * columnWidth + 5;
-            var width = (dayIndex == dayCount - 1 ? body.Right - (body.Left + TimeGutter + dayIndex * columnWidth) : columnWidth) - 10;
-            var dayTasks = Tasks.Where(task => TaskOccursOnDate(task, day.Date)).OrderBy(TaskPriority).ThenBy(task => task.Completed).ThenBy(task => task.Title);
-            var dayEvents = Events.Where(calendarEvent => calendarEvent.Start.Date == day.Date).OrderBy(calendarEvent => calendarEvent.Start);
-            var y = timeline.Top + 5;
+            DateTime day = days[dayIndex];
+            int x = body.Left + TimeGutter + dayIndex * columnWidth + 5;
+            int width = (dayIndex == dayCount - 1 ? body.Right - (body.Left + TimeGutter + dayIndex * columnWidth) : columnWidth) - 10;
+            IOrderedEnumerable<OrganizerTask>? dayTasks = Tasks.Where(task => TaskOccursOnDate(task, day.Date)).OrderBy(TaskPriority).ThenBy(task => task.Completed).ThenBy(task => task.Title);
+            IOrderedEnumerable<CalendarEvent>? dayEvents = Events.Where(calendarEvent => calendarEvent.Start.Date == day.Date).OrderBy(calendarEvent => calendarEvent.Start);
+            int y = timeline.Top + 5;
 
-            foreach(var task in dayTasks)
+            foreach(OrganizerTask task in dayTasks)
             {
                 if(y >= timeline.Bottom - 4) break;
 
-                var height = Math.Min(24, Math.Max(20, timeline.Bottom - y - 4));
-                var taskRect = new Rectangle(x, y, Math.Max(20, width), height);
+                int height = Math.Min(24, Math.Max(20, timeline.Bottom - y - 4));
+                Rectangle taskRect = new (x, y, Math.Max(20, width), height);
+
                 DrawTaskBlock(graphics, taskRect, task);
                 y += height + 4;
             }
 
-            foreach(var calendarEvent in dayEvents)
+            foreach(CalendarEvent calendarEvent in dayEvents)
             {
                 if(y >= timeline.Bottom - 4) break;
 
-                var height = Math.Min(24, Math.Max(20, timeline.Bottom - y - 4));
-                var eventRect = new Rectangle(x, y, Math.Max(20, width), height);
+                int height = Math.Min(24, Math.Max(20, timeline.Bottom - y - 4));
+                Rectangle eventRect = new(x, y, Math.Max(20, width), height);
+
                 DrawEventBlock(graphics, eventRect, calendarEvent, $"{calendarEvent.Start:h:mm tt}  {calendarEvent.Title}");
                 y += height + 4;
             }
@@ -353,15 +314,15 @@ internal sealed class CalendarPlannerView : Control
     {
         if(bounds.Width <= 0 || bounds.Height <= 0) return;
 
-        var selected = ReferenceEquals(calendarEvent, _selectedEvent);
-        using var fill = new SolidBrush(selected ? Color.FromArgb(92, 125, 176) : Color.FromArgb(255, 244, 190));
-        using var border = new Pen(selected ? Color.FromArgb(45, 72, 115) : Color.FromArgb(178, 128, 42));
+        bool selected = ReferenceEquals(calendarEvent, _selectedEvent);
+        using SolidBrush? fill = new(selected ? Color.FromArgb(92, 125, 176) : Color.FromArgb(255, 244, 190));
+        using Pen? border = new(selected ? Color.FromArgb(72, 92, 115) : Color.FromArgb(178, 128, 42));
         graphics.FillRectangle(fill, bounds);
         graphics.DrawRectangle(border, bounds);
         _eventBounds[bounds] = calendarEvent;
 
-        var color = selected ? Color.White : Color.FromArgb(50, 42, 20);
-        var textBounds = Rectangle.Inflate(bounds, -4, -2);
+        Color color = selected ? Color.White : Color.FromArgb(50, 42, 20);
+        Rectangle textBounds = Rectangle.Inflate(bounds, -4, -2);
 
         if(calendarEvent.PencilIn)
         {
@@ -375,8 +336,8 @@ internal sealed class CalendarPlannerView : Control
 
     private static void DrawPencilInIcon(Graphics graphics, Rectangle bounds, bool selected)
     {
-        using var pencil = new Pen(selected ? Color.White : Color.FromArgb(155, 111, 0), 2f);
-        using var outline = new Pen(selected ? Color.FromArgb(230, 230, 230) : Color.FromArgb(72, 48, 24));
+        using Pen? pencil = new (selected ? Color.White : Color.FromArgb(155, 111, 0), 2f);
+        using Pen? outline = new (selected ? Color.FromArgb(230, 230, 230) : Color.FromArgb(72, 48, 24));
         graphics.DrawLine(pencil, bounds.Left + 2, bounds.Bottom - 3, bounds.Right - 3, bounds.Top + 2);
         graphics.DrawLine(outline, bounds.Left + 1, bounds.Bottom - 2, bounds.Right - 2, bounds.Top + 1);
         graphics.FillPolygon(
@@ -388,28 +349,17 @@ internal sealed class CalendarPlannerView : Control
     {
         if(bounds.Width <= 0 || bounds.Height <= 0) return;
 
-        var selected = ReferenceEquals(task, _selectedTask);
-        using var fill = new SolidBrush(selected ? Color.FromArgb(91, 139, 74) : task.Completed ? Color.FromArgb(220, 226, 205) : Color.FromArgb(218, 238, 196));
-        using var border = new Pen(selected ? Color.FromArgb(42, 89, 35) : Color.FromArgb(95, 137, 67));
+        bool selected = ReferenceEquals(task, _selectedTask);
+        using SolidBrush? fill = new (selected ? Color.FromArgb(91, 139, 74) : task.Completed ? Color.FromArgb(220, 226, 205) : Color.FromArgb(218, 238, 196));
+        using Pen? border = new (selected ? Color.FromArgb(42, 89, 35) : Color.FromArgb(95, 137, 67));
         graphics.FillRectangle(fill, bounds);
         graphics.DrawRectangle(border, bounds);
         _taskBounds[bounds] = task;
 
-        var title = string.IsNullOrWhiteSpace(task.Title) ? "(Untitled task)" : task.Title;
-        var text = $"{TaskPriorityLabel(task)} {title}";
+        string? title = string.IsNullOrWhiteSpace(task.Title) ? "(Untitled task)" : task.Title;
+        string? text = $"{TaskPriorityLabel(task)} {title}";
 
         TextRenderer.DrawText(graphics, text, _smallFont, Rectangle.Inflate(bounds, -4, -2), selected ? Color.White : Color.FromArgb(38, 75, 30), TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
-    }
-
-    private static string FormatHour(int hour)
-    {
-        var normalized = hour % 12;
-        if(normalized == 0)
-        {
-            normalized = 12;
-        }
-
-        return $"{normalized} {(hour < 12 ? "AM" : "PM")}";
     }
 
     private static int TaskPriority(OrganizerTask task)
@@ -435,7 +385,7 @@ internal sealed class CalendarPlannerView : Control
 
     private static bool TaskOccursOnDate(OrganizerTask task, DateTime date)
     {
-        var dueDate = task.DueDate.Date;
+        DateTime dueDate = task.DueDate.Date;
 
         if(date.Date == dueDate) return true;
         if(date.Date < dueDate || task.RepeatEvery <= 0 || task.RepeatUnit == "None") return false;
@@ -453,34 +403,34 @@ internal sealed class CalendarPlannerView : Control
 
     private static bool HourlyTaskOccursOnDate(OrganizerTask task, DateTime date)
     {
-        var start = date.Date;
-        var end = start.AddDays(1);
+        DateTime start = date.Date;
+        DateTime end = start.AddDays(1);
 
         if(task.DueDate >= end) return false;
         if(task.DueDate >= start) return true;
 
-        var occurrencesToRange = Math.Ceiling((start - task.DueDate).TotalHours / task.RepeatEvery);
+        double occurrencesToRange = Math.Ceiling((start - task.DueDate).TotalHours / task.RepeatEvery);
 
         return task.DueDate.AddHours(occurrencesToRange * task.RepeatEvery) < end;
     }
 
     private static bool MonthlyTaskOccursOnDate(OrganizerTask task, DateTime date)
     {
-        var months = (date.Year - task.DueDate.Year) * 12 + date.Month - task.DueDate.Month;
+        int months = (date.Year - task.DueDate.Year) * 12 + date.Month - task.DueDate.Month;
 
         return months >= 0 && months % task.RepeatEvery == 0 && task.DueDate.AddMonths(months).Date == date.Date;
     }
 
     private static bool YearlyTaskOccursOnDate(OrganizerTask task, DateTime date)
     {
-        var years = date.Year - task.DueDate.Year;
+        int years = date.Year - task.DueDate.Year;
 
         return years >= 0 && years % task.RepeatEvery == 0 && task.DueDate.AddYears(years).Date == date.Date;
     }
 
     private static DateTime StartOfWeek(DateTime date)
     {
-        var diff = (7 + (date.DayOfWeek - DayOfWeek.Sunday)) % 7;
+        int diff = (7 + (date.DayOfWeek - DayOfWeek.Sunday)) % 7;
 
         return date.Date.AddDays(-diff);
     }

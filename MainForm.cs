@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Drawing.Printing;
 using System.Reflection;
 using System.Text;
+using Organizer.About;
 
 namespace Organizer;
 
@@ -25,6 +26,7 @@ public sealed partial class MainForm : Form
         {
             _data = new OrganizerData();
             _currentFilePath = string.Empty;
+
             return;
         }
 
@@ -37,18 +39,16 @@ public sealed partial class MainForm : Form
         Height = 700;
         StartPosition = FormStartPosition.CenterScreen;
 
-        var menuStrip = BuildMainMenu();
-        var iconLine = BuildIconLine();
+        MenuStrip? menuStrip = BuildMainMenu();
+        ToolStrip? iconLine = BuildIconLine();
+
         _tabs = new TabControl { Dock = DockStyle.Fill, Alignment = TabAlignment.Right, Multiline = true };
         _tabs.TabPages.Add(BuildCalendarTab());
         _tabs.TabPages.Add(BuildTab("Anniversary", _data.Anniversaries));
         _tabs.TabPages.Add(BuildTab("Contacts", _data.Contacts));
         _tabs.TabPages.Add(BuildNotepadTab());
 
-        var trashDropTarget = BuildTrashDropTarget();
-
         Controls.Add(_tabs);
-        Controls.Add(trashDropTarget);
         Controls.Add(iconLine);
         Controls.Add(menuStrip);
         MainMenuStrip = menuStrip;
@@ -56,7 +56,7 @@ public sealed partial class MainForm : Form
 
     private ToolStrip BuildIconLine()
     {
-        var toolStrip = new ToolStrip
+        ToolStrip? toolStrip = new()
         {
             Dock = DockStyle.Top,
             GripStyle = ToolStripGripStyle.Hidden,
@@ -94,7 +94,7 @@ public sealed partial class MainForm : Form
 
     private ToolStripButton IconCommand(string label, string commandText)
     {
-        var button = new ToolStripButton(label)
+        ToolStripButton? button = new(label)
         {
             DisplayStyle = ToolStripItemDisplayStyle.Image,
             Image = CreateToolbarIcon(label),
@@ -109,7 +109,8 @@ public sealed partial class MainForm : Form
 
     private static Bitmap CreateToolbarIcon(string label)
     {
-        var bitmap = new Bitmap(24, 24);
+        Bitmap? bitmap = new(24, 24);
+
         using var graphics = Graphics.FromImage(bitmap);
         graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.None;
         graphics.Clear(Color.Magenta);
@@ -191,9 +192,10 @@ public sealed partial class MainForm : Form
 
     private static void DrawPage(Graphics graphics, int x, int y, int width, int height)
     {
-        using var paper = new SolidBrush(Color.White);
-        using var fold = new SolidBrush(Color.FromArgb(232, 232, 232));
-        using var pen = new Pen(Color.Navy);
+        using SolidBrush? paper = new(Color.White);
+        using SolidBrush? fold = new(Color.FromArgb(232, 232, 232));
+        using Pen? pen = new(Color.Navy);
+
         graphics.FillRectangle(paper, x, y, width, height);
         graphics.DrawRectangle(pen, x, y, width, height);
         graphics.FillPolygon(fold, [new Point(x + width - 5, y), new Point(x + width, y + 5), new Point(x + width - 5, y + 5)]);
@@ -203,9 +205,10 @@ public sealed partial class MainForm : Form
 
     private static void DrawFolder(Graphics graphics)
     {
-        using var fill = new SolidBrush(Color.FromArgb(255, 210, 74));
-        using var dark = new SolidBrush(Color.FromArgb(220, 154, 20));
-        using var pen = new Pen(Color.FromArgb(116, 81, 0));
+        using SolidBrush? fill = new(Color.FromArgb(255, 210, 74));
+        using SolidBrush? dark = new(Color.FromArgb(220, 154, 20));
+        using Pen? pen = new(Color.FromArgb(116, 81, 0));
+
         graphics.FillRectangle(dark, 3, 7, 7, 3);
         graphics.FillRectangle(fill, 3, 9, 18, 11);
         graphics.DrawRectangle(pen, 3, 7, 18, 13);
@@ -213,10 +216,11 @@ public sealed partial class MainForm : Form
 
     private static void DrawFloppy(Graphics graphics)
     {
-        using var body = new SolidBrush(Color.FromArgb(43, 95, 160));
-        using var label = new SolidBrush(Color.White);
-        using var metal = new SolidBrush(Color.Silver);
-        using var pen = new Pen(Color.Navy);
+        using SolidBrush? body = new(Color.FromArgb(43, 95, 160));
+        using SolidBrush? label = new(Color.White);
+        using SolidBrush? metal = new(Color.Silver);
+        using Pen? pen = new(Color.Navy);
+
         graphics.FillRectangle(body, 4, 3, 16, 18);
         graphics.DrawRectangle(pen, 4, 3, 16, 18);
         graphics.FillRectangle(metal, 7, 4, 9, 5);
@@ -225,10 +229,11 @@ public sealed partial class MainForm : Form
 
     private static void DrawPrinter(Graphics graphics)
     {
-        using var gray = new SolidBrush(Color.LightGray);
-        using var dark = new SolidBrush(Color.DimGray);
-        using var paper = new SolidBrush(Color.White);
-        using var pen = new Pen(Color.Black);
+        using SolidBrush? gray = new(Color.LightGray);
+        using SolidBrush? dark = new(Color.DimGray);
+        using SolidBrush? paper = new(Color.White);
+        using Pen? pen = new(Color.Black);
+
         graphics.FillRectangle(paper, 7, 2, 10, 7);
         graphics.DrawRectangle(pen, 7, 2, 10, 7);
         graphics.FillRectangle(gray, 4, 8, 16, 9);
@@ -238,8 +243,9 @@ public sealed partial class MainForm : Form
 
     private static void DrawScissors(Graphics graphics)
     {
-        using var pen = new Pen(Color.Black, 2);
-        using var red = new Pen(Color.Maroon, 2);
+        using Pen? pen = new(Color.Black, 2);
+        using Pen? red = new(Color.Maroon, 2);
+
         graphics.DrawEllipse(red, 4, 4, 5, 5);
         graphics.DrawEllipse(red, 4, 15, 5, 5);
         graphics.DrawLine(pen, 9, 8, 19, 18);
@@ -248,10 +254,11 @@ public sealed partial class MainForm : Form
 
     private static void DrawClipboard(Graphics graphics)
     {
-        using var board = new SolidBrush(Color.FromArgb(194, 145, 68));
-        using var paper = new SolidBrush(Color.White);
-        using var clip = new SolidBrush(Color.Silver);
-        using var pen = new Pen(Color.Black);
+        using SolidBrush? board = new(Color.FromArgb(194, 145, 68));
+        using SolidBrush? paper = new(Color.White);
+        using SolidBrush? clip = new(Color.Silver);
+        using Pen? pen = new(Color.Black);
+
         graphics.FillRectangle(board, 5, 4, 14, 17);
         graphics.DrawRectangle(pen, 5, 4, 14, 17);
         graphics.FillRectangle(paper, 7, 7, 10, 12);
@@ -262,17 +269,19 @@ public sealed partial class MainForm : Form
 
     private static void DrawMagnifier(Graphics graphics)
     {
-        using var glass = new Pen(Color.Navy, 2);
-        using var handle = new Pen(Color.Black, 2);
+        using Pen? glass = new(Color.Navy, 2);
+        using Pen? handle = new(Color.Black, 2);
+
         graphics.DrawEllipse(glass, 4, 4, 10, 10);
         graphics.DrawLine(handle, 13, 13, 20, 20);
     }
 
     private static void DrawCalendar(Graphics graphics, string text)
     {
-        using var paper = new SolidBrush(Color.White);
-        using var header = new SolidBrush(Color.FromArgb(170, 30, 30));
-        using var pen = new Pen(Color.Black);
+        using SolidBrush? paper = new(Color.White);
+        using SolidBrush? header = new(Color.FromArgb(170, 30, 30));
+        using Pen? pen = new(Color.Black);
+
         graphics.FillRectangle(paper, 4, 4, 16, 16);
         graphics.DrawRectangle(pen, 4, 4, 16, 16);
         graphics.FillRectangle(header, 4, 4, 16, 4);
@@ -282,16 +291,18 @@ public sealed partial class MainForm : Form
 
         if(text.Length > 0)
         {
-            using var font = new Font(SystemFonts.MessageBoxFont.FontFamily, 7f, FontStyle.Bold);
+            using Font? font = new(SystemFonts.MessageBoxFont.FontFamily, 7f, FontStyle.Bold);
+
             graphics.DrawString(text, font, Brushes.Navy, 9, 10);
         }
     }
 
     private static void DrawContactCard(Graphics graphics)
     {
-        using var card = new SolidBrush(Color.White);
-        using var accent = new SolidBrush(Color.FromArgb(255, 220, 90));
-        using var pen = new Pen(Color.Navy);
+        using SolidBrush? card = new(Color.White);
+        using SolidBrush? accent = new(Color.FromArgb(255, 220, 90));
+        using Pen? pen = new(Color.Navy);
+
         graphics.FillRectangle(card, 3, 5, 18, 14);
         graphics.DrawRectangle(pen, 3, 5, 18, 14);
         graphics.FillEllipse(accent, 6, 8, 5, 5);
@@ -302,7 +313,8 @@ public sealed partial class MainForm : Form
     private static void DrawChecklist(Graphics graphics)
     {
         DrawPage(graphics, 4, 3, 16, 18);
-        using var pen = new Pen(Color.Green, 2);
+        using Pen? pen = new(Color.Green, 2);
+
         graphics.DrawLine(pen, 6, 9, 8, 11);
         graphics.DrawLine(pen, 8, 11, 12, 7);
         graphics.DrawLine(Pens.Black, 13, 9, 18, 9);
@@ -311,9 +323,10 @@ public sealed partial class MainForm : Form
 
     private static void DrawNotebook(Graphics graphics)
     {
-        using var cover = new SolidBrush(Color.FromArgb(255, 239, 142));
-        using var spine = new SolidBrush(Color.FromArgb(60, 120, 190));
-        using var pen = new Pen(Color.Black);
+        using SolidBrush? cover = new(Color.FromArgb(255, 239, 142));
+        using SolidBrush? spine = new(Color.FromArgb(60, 120, 190));
+        using Pen? pen = new(Color.Black);
+
         graphics.FillRectangle(cover, 5, 3, 15, 18);
         graphics.FillRectangle(spine, 5, 3, 4, 18);
         graphics.DrawRectangle(pen, 5, 3, 15, 18);
@@ -324,15 +337,16 @@ public sealed partial class MainForm : Form
 
     private static void DrawPlus(Graphics graphics)
     {
-        using var brush = new SolidBrush(Color.ForestGreen);
+        using SolidBrush? brush = new(Color.ForestGreen);
         graphics.FillRectangle(brush, 10, 4, 5, 16);
         graphics.FillRectangle(brush, 4, 10, 17, 5);
     }
 
     private static void DrawPencil(Graphics graphics)
     {
-        using var yellow = new Pen(Color.Goldenrod, 4);
-        using var dark = new Pen(Color.Black, 1);
+        using Pen? yellow = new(Color.Goldenrod, 4);
+        using Pen? dark = new(Color.Black, 1);
+
         graphics.DrawLine(yellow, 6, 18, 18, 6);
         graphics.DrawLine(dark, 5, 19, 19, 5);
         graphics.FillPolygon(Brushes.Bisque, [new Point(18, 6), new Point(21, 3), new Point(20, 8)]);
@@ -340,8 +354,9 @@ public sealed partial class MainForm : Form
 
     private static void DrawTrash(Graphics graphics)
     {
-        using var body = new SolidBrush(Color.LightGray);
-        using var pen = new Pen(Color.Black);
+        using SolidBrush? body = new(Color.LightGray);
+        using Pen? pen = new(Color.Black);
+
         graphics.FillRectangle(body, 7, 8, 10, 12);
         graphics.DrawRectangle(pen, 7, 8, 10, 12);
         graphics.DrawLine(pen, 5, 7, 19, 7);
@@ -352,15 +367,17 @@ public sealed partial class MainForm : Form
 
     private static void DrawHelp(Graphics graphics)
     {
-        using var circle = new SolidBrush(Color.FromArgb(40, 90, 180));
-        using var font = new Font(SystemFonts.MessageBoxFont.FontFamily, 14f, FontStyle.Bold);
+        using SolidBrush? circle = new(Color.FromArgb(40, 90, 180));
+        using Font? font = new(SystemFonts.MessageBoxFont.FontFamily, 14f, FontStyle.Bold);
+
         graphics.FillEllipse(circle, 3, 3, 18, 18);
         graphics.DrawString("?", font, Brushes.White, 6, 2);
     }
 
     private MenuStrip BuildMainMenu()
     {
-        var menu = new MenuStrip { Dock = DockStyle.Top };
+        MenuStrip? menu = new() { Dock = DockStyle.Top };
+
         menu.Items.AddRange([
             BuildMenu("&File", [
                 Command("&New\tCtrl+N"),
@@ -516,7 +533,8 @@ public sealed partial class MainForm : Form
 
     private ToolStripMenuItem BuildMenu(string text, ToolStripItem[] children)
     {
-        var menuItem = new ToolStripMenuItem(text);
+        ToolStripMenuItem? menuItem = new(text);
+
         menuItem.DropDownItems.AddRange(children);
 
         return menuItem;
@@ -524,7 +542,8 @@ public sealed partial class MainForm : Form
 
     private ToolStripMenuItem Command(string text)
     {
-        var menuItem = new ToolStripMenuItem(text);
+        ToolStripMenuItem? menuItem = new(text);
+
         menuItem.Click += (_, _) => ExecuteCommand(text);
 
         return menuItem;
@@ -532,7 +551,8 @@ public sealed partial class MainForm : Form
 
     private ToolStripMenuItem Command(string text, string commandKey)
     {
-        var menuItem = new ToolStripMenuItem(text);
+        ToolStripMenuItem? menuItem = new(text);
+
         menuItem.Click += (_, _) => ExecuteCommand(commandKey);
 
         return menuItem;
@@ -542,17 +562,25 @@ public sealed partial class MainForm : Form
 
     private void ExecuteCommand(string commandText)
     {
-        var command = CleanMenuText(commandText);
+        string? command = CleanMenuText(commandText);
 
         if(command.Equals("Organizer Preferences", StringComparison.OrdinalIgnoreCase))
         {
             ShowOrganizerPreferences();
+
             return;
         }
 
         if(command.Equals("Printer", StringComparison.OrdinalIgnoreCase) || command.Equals("Print Setup", StringComparison.OrdinalIgnoreCase))
         {
             ShowPrinterSetup();
+
+            return;
+        }
+
+        if(command.Equals("About Organizer", StringComparison.OrdinalIgnoreCase))
+        {
+            aboutToolStripMenuItem_Click(this, EventArgs.Empty);
             return;
         }
 
@@ -793,7 +821,7 @@ public sealed partial class MainForm : Form
 
     private void SaveOrganizerAs()
     {
-        using var dialog = new SaveFileDialog
+        using SaveFileDialog? dialog = new()
         {
             Title = "Save Organizer File As",
             Filter = "Organizer data (*.json)|*.json|All files (*.*)|*.*",
@@ -810,7 +838,7 @@ public sealed partial class MainForm : Form
 
     private string GetCurrentFileDirectory()
     {
-        var directory = Path.GetDirectoryName(_currentFilePath);
+        string? directory = Path.GetDirectoryName(_currentFilePath);
 
         return !string.IsNullOrWhiteSpace(directory) && Directory.Exists(directory)
             ? directory
@@ -842,14 +870,14 @@ public sealed partial class MainForm : Form
 
     private void RefreshSectionSource<T>(string sectionName, List<T> items) where T : class
     {
-        if(!_sectionSources.TryGetValue(sectionName, out var source)) return;
+        if(!_sectionSources.TryGetValue(sectionName, out BindingSource? source)) return;
 
         source.ResetBindings(false);
     }
 
     private void SelectSection(string sectionName)
     {
-        var tabName = sectionName switch
+        string? tabName = sectionName switch
         {
             "Calendar" => "Calendar",
             "To Do" => "To Do",
@@ -859,7 +887,8 @@ public sealed partial class MainForm : Form
             _ => sectionName
         };
 
-        var page = _tabs.TabPages.Cast<TabPage>().FirstOrDefault(tab => tab.Text.Equals(tabName, StringComparison.OrdinalIgnoreCase));
+        TabPage? page = _tabs.TabPages.Cast<TabPage>().FirstOrDefault(tab => tab.Text.Equals(tabName, StringComparison.OrdinalIgnoreCase));
+
         if(page is null)
         {
             ShowNotImplemented(sectionName);
@@ -874,7 +903,7 @@ public sealed partial class MainForm : Form
     {
         SelectSection("Calendar");
 
-        var calendarEvent = new CalendarEvent { Start = DateTime.Today.AddHours(9), End = DateTime.Today.AddHours(10) };
+        CalendarEvent? calendarEvent = new() { Start = DateTime.Today.AddHours(9), End = DateTime.Today.AddHours(10) };
 
         if(CreateAppointmentDialog.Edit(this, calendarEvent, "Create Appointment", _data.Events))
         {
@@ -888,7 +917,7 @@ public sealed partial class MainForm : Form
     {
         SelectSection(sectionName);
 
-        var item = new T();
+        T? item = new();
 
         if(RecordEditorDialog.Edit(this, item, $"Add {Singular(sectionName)}"))
         {
@@ -912,7 +941,7 @@ public sealed partial class MainForm : Form
 
     private void EditCurrentSectionItem()
     {
-        var sectionName = _tabs.SelectedTab?.Text;
+        string? sectionName = _tabs.SelectedTab?.Text;
 
         if(sectionName is null || !_sectionSources.TryGetValue(sectionName, out var source) || source.Current is null)
         {
@@ -921,7 +950,7 @@ public sealed partial class MainForm : Form
             return;
         }
 
-        var item = source.Current;
+        object? item = source.Current;
 
         if(RecordEditorDialog.Edit(this, item, $"Edit {Singular(sectionName)}"))
         {
@@ -935,7 +964,7 @@ public sealed partial class MainForm : Form
 
     private void DeleteCurrentSectionItem()
     {
-        var sectionName = _tabs.SelectedTab?.Text;
+        string? sectionName = _tabs.SelectedTab?.Text;
 
         if(sectionName is null || !_sectionSources.TryGetValue(sectionName, out var source) || source.Current is null)
         {
@@ -946,7 +975,7 @@ public sealed partial class MainForm : Form
 
         if(MessageBox.Show(this, "Delete the selected item?", "Confirm delete", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
 
-        var item = source.Current;
+        object? item = source.Current;
 
         source.RemoveCurrent();
         _store.Save(_data);
@@ -956,8 +985,8 @@ public sealed partial class MainForm : Form
 
     private void ShowPrintDialog()
     {
-        using var document = CreatePrintDocument();
-        using var dialog = new PrintDialog { Document = document, UseEXDialog = true };
+        using PrintDocument? document = CreatePrintDocument();
+        using PrintDialog? dialog = new() { Document = document, UseEXDialog = true };
 
         if(dialog.ShowDialog(this) == DialogResult.OK)
         {
@@ -968,8 +997,8 @@ public sealed partial class MainForm : Form
 
     private void ShowPageSetupDialog()
     {
-        using var document = CreatePrintDocument();
-        using var dialog = new PageSetupDialog { Document = document, EnableMetric = true };
+        using PrintDocument? document = CreatePrintDocument();
+        using PageSetupDialog? dialog = new() { Document = document, EnableMetric = true };
 
         if(dialog.ShowDialog(this) == DialogResult.OK)
         {
@@ -984,7 +1013,7 @@ public sealed partial class MainForm : Form
 
     private PrintDocument CreatePrintDocument()
     {
-        var document = new PrintDocument();
+        PrintDocument? document = new();
 
         if(!string.IsNullOrWhiteSpace(_data.Preferences.PrinterName)) document.PrinterSettings.PrinterName = _data.Preferences.PrinterName;
 
@@ -992,7 +1021,7 @@ public sealed partial class MainForm : Form
         document.DefaultPageSettings.Margins = new Margins(_data.Preferences.MarginLeft, _data.Preferences.MarginRight, _data.Preferences.MarginTop, _data.Preferences.MarginBottom);
         document.PrintPage += (_, e) =>
         {
-            var text = BuildPrintableSummary();
+            string? text = BuildPrintableSummary();
             e.Graphics?.DrawString(text, SystemFonts.MessageBoxFont, Brushes.Black, e.MarginBounds);
         };
 
@@ -1001,7 +1030,7 @@ public sealed partial class MainForm : Form
 
     private string BuildPrintableSummary()
     {
-        var builder = new StringBuilder();
+        StringBuilder? builder = new();
 
         builder.AppendLine("Organizer");
         builder.AppendLine($"Printed: {DateTime.Now:g}");
@@ -1016,10 +1045,10 @@ public sealed partial class MainForm : Form
 
     private void ShowAlarms()
     {
-        var today = DateTime.Today;
-        var upcomingEvents = _data.Events.Where(item => item.Start >= DateTime.Now && item.Start < today.AddDays(7)).OrderBy(item => item.Start).Select(item => $"Appointment: {item.Start:g} {item.Title}");
-        var dueTasks = _data.Tasks.Where(item => !item.Completed && item.DueDate.Date <= today.AddDays(7)).OrderBy(item => item.DueDate).Select(item => $"To Do: {item.DueDate:g} {item.Title}");
-        var lines = upcomingEvents.Concat(dueTasks).DefaultIfEmpty("No upcoming alarms.");
+        DateTime today = DateTime.Today;
+        IEnumerable<string>? upcomingEvents = _data.Events.Where(item => item.Start >= DateTime.Now && item.Start < today.AddDays(7)).OrderBy(item => item.Start).Select(item => $"Appointment: {item.Start:g} {item.Title}");
+        IEnumerable<string>? dueTasks = _data.Tasks.Where(item => !item.Completed && item.DueDate.Date <= today.AddDays(7)).OrderBy(item => item.DueDate).Select(item => $"To Do: {item.DueDate:g} {item.Title}");
+        IEnumerable<string>? lines = upcomingEvents.Concat(dueTasks).DefaultIfEmpty("No upcoming alarms.");
 
         MessageBox.Show(this, string.Join(Environment.NewLine, lines), "Alarms", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
@@ -1038,7 +1067,7 @@ public sealed partial class MainForm : Form
 
     private Control BuildTrashDropTarget()
     {
-        var panel = new Panel
+        Panel? panel = new()
         {
             Dock = DockStyle.Bottom,
             Height = 58,
@@ -1047,7 +1076,7 @@ public sealed partial class MainForm : Form
             AllowDrop = true
         };
 
-        var trash = new Label
+        Label? trash = new()
         {
             AutoSize = false,
             Width = 58,
@@ -1085,24 +1114,24 @@ public sealed partial class MainForm : Form
 
     private TabPage BuildCalendarTab()
     {
-        var page = new TabPage("Calendar");
-        var monthCalendar = new MonthCalendar { Dock = DockStyle.Top, MaxSelectionCount = 1, ShowTodayCircle = true };
+        TabPage? page = new("Calendar");
+        MonthCalendar? monthCalendar = new() { Dock = DockStyle.Top, MaxSelectionCount = 1, ShowTodayCircle = true };
+        CalendarPlannerView? planner = new() { Dock = DockStyle.Fill };
 
-        var planner = new CalendarPlannerView { Dock = DockStyle.Fill };
         CalendarEvent? selectedEvent = null;
         OrganizerTask? selectedTask = null;
 
-        var dayViewButton = new Button { Text = "Day", Width = 90 };
-        var weekViewButton = new Button { Text = "Week", Width = 90 };
-        var monthViewButton = new Button { Text = "Month", Width = 90 };
-        var previousButton = new Button { Text = "<", Width = 44 };
-        var nextButton = new Button { Text = ">", Width = 44 };
-        var addButton = new Button { Text = "Create Appointment", Width = 140 };
-        var editButton = new Button { Text = "Edit", Width = 90 };
-        var deleteButton = new Button { Text = "Delete", Width = 90 };
-        var todayButton = new Button { Text = "Today", Width = 90 };
+        Button? dayViewButton = new() { Text = "Day", Width = 90 };
+        Button? weekViewButton = new() { Text = "Week", Width = 90 };
+        Button? monthViewButton = new() { Text = "Month", Width = 90 };
+        Button? previousButton = new() { Text = "<", Width = 44 };
+        Button? nextButton = new() { Text = ">", Width = 44 };
+        Button? addButton = new() { Text = "Create Appointment", Width = 140 };
+        Button? editButton = new() { Text = "Edit", Width = 90 };
+        Button? deleteButton = new() { Text = "Delete", Width = 90 };
+        Button? todayButton = new() { Text = "Today", Width = 90 };
         CalendarViewMode viewMode = CalendarViewMode.Day;
-        var plannerDate = monthCalendar.SelectionStart.Date;
+        DateTime plannerDate = monthCalendar.SelectionStart.Date;
 
         void RefreshCalendar()
         {
@@ -1209,8 +1238,8 @@ public sealed partial class MainForm : Form
 
         addButton.Click += (_, _) =>
         {
-            var date = monthCalendar.SelectionStart.Date;
-            var calendarEvent = new CalendarEvent { Start = date.AddHours(9), End = date.AddHours(10) };
+            DateTime date = monthCalendar.SelectionStart.Date;
+            CalendarEvent? calendarEvent = new() { Start = date.AddHours(9), End = date.AddHours(10) };
 
             if(CreateAppointmentDialog.Edit(this, calendarEvent, "Create Appointment", _data.Events))
             {
@@ -1232,15 +1261,18 @@ public sealed partial class MainForm : Form
             RefreshCalendar();
         };
 
-        var leftPanelBackColor = Color.FromArgb(219, 196, 137);
-        var buttonPanel = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 48, Padding = new Padding(8), FlowDirection = FlowDirection.LeftToRight, BackColor = leftPanelBackColor };
+        FlowLayoutPanel? buttonPanel = new() { Dock = DockStyle.Top, Height = 48, Padding = new Padding(8), FlowDirection = FlowDirection.LeftToRight, BackColor = Color.FromArgb(199, 156, 75) };
+
         buttonPanel.Controls.AddRange([previousButton, nextButton]);
 
-        var leftPanel = new Panel { Dock = DockStyle.Left, Width = 260, Padding = new Padding(8), BackColor = leftPanelBackColor };
+        Control? trashDropTarget = BuildTrashDropTarget();
+        Panel? leftPanel = new() { Dock = DockStyle.Left, Width = 260, Padding = new Padding(8), BackColor = Color.FromArgb(219, 196, 137) };
+
         leftPanel.Controls.Add(buttonPanel);
         leftPanel.Controls.Add(monthCalendar);
 
-        var rightPanel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(8), BackColor = Color.FromArgb(178, 134, 61) };
+        Panel rightPanel = new() { Dock = DockStyle.Fill, Padding = new Padding(8), BackColor = Color.FromArgb(178, 134, 61) };
+
         rightPanel.Controls.Add(planner);
 
         page.Controls.Add(rightPanel);
@@ -1274,7 +1306,7 @@ public sealed partial class MainForm : Form
 
     private static bool TaskOccursInRange(OrganizerTask task, DateTime startInclusive, DateTime endExclusive)
     {
-        for(var date = startInclusive.Date; date < endExclusive.Date; date = date.AddDays(1))
+        for(DateTime date = startInclusive.Date; date < endExclusive.Date; date = date.AddDays(1))
         {
             if(TaskOccursOnDate(task, date)) return true;
         }
@@ -1284,7 +1316,7 @@ public sealed partial class MainForm : Form
 
     private static bool TaskOccursOnDate(OrganizerTask task, DateTime date)
     {
-        var dueDate = task.DueDate.Date;
+        DateTime dueDate = task.DueDate.Date;
 
         if(date.Date == dueDate) return true;
         if(date.Date < dueDate || task.RepeatEvery <= 0 || task.RepeatUnit == "None") return false;
@@ -1302,27 +1334,27 @@ public sealed partial class MainForm : Form
 
     private static bool HourlyTaskOccursOnDate(OrganizerTask task, DateTime date)
     {
-        var start = date.Date;
-        var end = start.AddDays(1);
+        DateTime start = date.Date;
+        DateTime end = start.AddDays(1);
 
         if(task.DueDate >= end) return false;
         if(task.DueDate >= start) return true;
 
-        var occurrencesToRange = Math.Ceiling((start - task.DueDate).TotalHours / task.RepeatEvery);
+        double occurrencesToRange = Math.Ceiling((start - task.DueDate).TotalHours / task.RepeatEvery);
 
         return task.DueDate.AddHours(occurrencesToRange * task.RepeatEvery) < end;
     }
 
     private static bool MonthlyTaskOccursOnDate(OrganizerTask task, DateTime date)
     {
-        var months = (date.Year - task.DueDate.Year) * 12 + date.Month - task.DueDate.Month;
+        int months = (date.Year - task.DueDate.Year) * 12 + date.Month - task.DueDate.Month;
 
         return months >= 0 && months % task.RepeatEvery == 0 && task.DueDate.AddMonths(months).Date == date.Date;
     }
 
     private static bool YearlyTaskOccursOnDate(OrganizerTask task, DateTime date)
     {
-        var years = date.Year - task.DueDate.Year;
+        int years = date.Year - task.DueDate.Year;
 
         return years >= 0 && years % task.RepeatEvery == 0 && task.DueDate.AddYears(years).Date == date.Date;
     }
@@ -1340,18 +1372,19 @@ public sealed partial class MainForm : Form
 
     private static DateTime StartOfWeek(DateTime date)
     {
-        var diff = (7 + (date.DayOfWeek - DayOfWeek.Sunday)) % 7;
+        int diff = (7 + (date.DayOfWeek - DayOfWeek.Sunday)) % 7;
 
         return date.Date.AddDays(-diff);
     }
 
     private TabPage BuildTab<T>(string title, List<T> items) where T : class, new()
     {
-        var page = new TabPage(title);
-        var source = new BindingSource { DataSource = new SortableBindingList<T>(items) };
+        TabPage? page = new(title);
+        BindingSource? source = new() { DataSource = new SortableBindingList<T>(items) };
+
         _sectionSources[title] = source;
 
-        var grid = new DataGridView
+        DataGridView? grid = new()
         {
             Dock = DockStyle.Fill,
             AutoGenerateColumns = true,
@@ -1385,15 +1418,17 @@ public sealed partial class MainForm : Form
             {
                 dragStart = null;
                 dragItem = null;
+
                 return;
             }
 
-            var hit = grid.HitTest(e.X, e.Y);
+            DataGridView.HitTestInfo? hit = grid.HitTest(e.X, e.Y);
 
             if(hit.RowIndex < 0)
             {
                 dragStart = null;
                 dragItem = null;
+
                 return;
             }
 
@@ -1605,6 +1640,7 @@ public sealed partial class MainForm : Form
             if(tree.SelectedNode?.Tag is Note note) source.Position = _data.Notes.IndexOf(note);
             LoadCurrentNote();
         };
+
         tree.AfterLabelEdit += (_, e) =>
         {
             if(e.Label is null || e.Node?.Tag is not Note note) return;
@@ -1614,20 +1650,20 @@ public sealed partial class MainForm : Form
             source.ResetCurrentItem();
             _store.Save(_data);
         };
+
         tree.ItemDrag += (_, e) =>
         {
             if(e.Item is TreeNode node) tree.DoDragDrop(node, DragDropEffects.Move);
         };
-        tree.DragEnter += (_, e) =>
-        {
-            e.Effect = e.Data?.GetDataPresent(typeof(TreeNode)) == true ? DragDropEffects.Move : DragDropEffects.None;
-        };
+
+        tree.DragEnter += (_, e) => e.Effect = e.Data?.GetDataPresent(typeof(TreeNode)) == true ? DragDropEffects.Move : DragDropEffects.None;
+
         tree.DragDrop += (_, e) =>
         {
             if(e.Data?.GetData(typeof(TreeNode)) is not TreeNode draggedNode || draggedNode.Tag is not Note draggedNote) return;
 
-            var clientPoint = tree.PointToClient(new Point(e.X, e.Y));
-            var targetNode = tree.GetNodeAt(clientPoint);
+            Point clientPoint = tree.PointToClient(new Point(e.X, e.Y));
+            TreeNode? targetNode = tree.GetNodeAt(clientPoint);
 
             if(targetNode?.Tag is Note targetNote && targetNote.IsChapterHeading && !draggedNote.IsChapterHeading)
             {
@@ -1835,11 +1871,472 @@ public sealed partial class MainForm : Form
 
         if(idProperty?.GetValue(item) is Guid id && id == Guid.Empty) idProperty.SetValue(item, Guid.NewGuid());
     }
+
+    private void aboutToolStripMenuItem_Click(object? sender, EventArgs e)
+    {
+        using AboutForm about = new();
+
+        about.ShowDialog(this);
+    }
 }
 
 internal sealed class TrashDropPayload(Action delete)
 {
     public void Delete() => delete();
+}
+
+internal sealed class AppointmentAlarmDialog : Form
+{
+    private readonly CalendarEvent _appointment;
+    private readonly DomainUpDown _amount = new() { ReadOnly = true, Width = 58, TextAlign = HorizontalAlignment.Right };
+    private readonly ComboBox _unit = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 86 };
+    private readonly DateTimePicker _alarmDate = new() { Format = DateTimePickerFormat.Short, Width = 96 };
+    private readonly DateTimePicker _alarmTime = new() { Format = DateTimePickerFormat.Custom, CustomFormat = "h:mm tt", ShowUpDown = true, Width = 78 };
+    private readonly ComboBox _tune = new() { DropDownStyle = ComboBoxStyle.DropDown, Width = 170 };
+    private readonly TextBox _message = new() { Width = 245 };
+    private readonly TextBox _run = new() { Width = 245 };
+    private readonly CheckBox _displayDialog = new() { Text = "D&isplay dialog box at alarm time", AutoSize = true };
+    private readonly RadioButton _setAlarm = new() { Text = "Set A&larm", AutoSize = true };
+    private readonly RadioButton _cancelAlarm = new() { Text = "&Cancel Alarm", AutoSize = true };
+    private readonly RadioButton _before = new() { Text = "B&efore", AutoSize = true };
+    private readonly RadioButton _after = new() { Text = "&After", AutoSize = true };
+    private readonly RadioButton _on = new() { Text = "&On", AutoSize = true };
+    private readonly Label _appointmentTime = new() { AutoSize = true };
+
+    private AppointmentAlarmDialog(CalendarEvent appointment)
+    {
+        _appointment = appointment;
+        Text = "Alarm";
+        Width = 520;
+        Height = 292;
+        StartPosition = FormStartPosition.CenterParent;
+        MinimizeBox = false;
+        MaximizeBox = false;
+        FormBorderStyle = FormBorderStyle.FixedDialog;
+
+        for(int value = 0; value <= 999; value += 5)
+        {
+            _amount.Items.Add(value.ToString());
+        }
+
+        _unit.Items.AddRange(["Minutes", "Hours", "Days"]);
+        _tune.Items.AddRange(["Default", "Chime", "Ding", "Notify"]);
+
+        Panel? body = new()
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(12)
+        };
+
+        Button? playButton = new() { Text = "Play", Width = 82 };
+        Button? browseButton = new() { Text = "Bro&wse...", Width = 82 };
+        Button? runBrowseButton = new() { Text = "&Browse...", Width = 82 };
+
+        playButton.Click += (_, _) => System.Media.SystemSounds.Asterisk.Play();
+        browseButton.Click += (_, _) => ShowNotImplemented("Browse alarm tune");
+        runBrowseButton.Click += (_, _) => ShowNotImplemented("Browse run command");
+
+        _amount.Location = new Point(16, 14);
+        _unit.Location = new Point(82, 14);
+        _alarmDate.Location = new Point(180, 14);
+        _alarmTime.Location = new Point(286, 14);
+        body.Controls.AddRange([_amount, _unit, _alarmDate, _alarmTime]);
+
+        AddLabel(body, "T&une", 16, 49);
+        _tune.Location = new Point(82, 45);
+        playButton.Location = new Point(262, 43);
+        body.Controls.AddRange([_tune, playButton]);
+
+        AddLabel(body, "Me&ssage", 16, 84);
+        _message.Location = new Point(82, 80);
+        body.Controls.Add(_message);
+
+        AddLabel(body, "&Run", 16, 119);
+        _run.Location = new Point(82, 115);
+        browseButton.Location = new Point(336, 43);
+        runBrowseButton.Location = new Point(336, 113);
+        body.Controls.AddRange([_run, browseButton, runBrowseButton]);
+
+        _displayDialog.Location = new Point(82, 147);
+        body.Controls.Add(_displayDialog);
+
+        _setAlarm.Location = new Point(16, 190);
+        _cancelAlarm.Location = new Point(120, 190);
+        _appointmentTime.Location = new Point(16, 218);
+        _before.Location = new Point(260, 190);
+        _after.Location = new Point(330, 190);
+        _on.Location = new Point(392, 190);
+        body.Controls.AddRange([_setAlarm, _cancelAlarm, _appointmentTime, _before, _after, _on]);
+
+        Button? okButton = new() { Text = "OK", DialogResult = DialogResult.OK, Width = 82 };
+        Button? cancelButton = new() { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 82 };
+        Button? helpButton = new() { Text = "&Help", Width = 82 };
+
+        okButton.Click += (_, _) => SaveValues();
+        helpButton.Click += (_, _) => ShowNotImplemented("Help");
+
+        FlowLayoutPanel? buttons = new()
+        {
+            Dock = DockStyle.Right,
+            Width = 100,
+            Padding = new Padding(8, 12, 8, 8),
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false
+        };
+        buttons.Controls.AddRange([okButton, cancelButton, helpButton]);
+
+        AcceptButton = okButton;
+        CancelButton = cancelButton;
+        Controls.Add(buttons);
+        Controls.Add(body);
+        LoadValues();
+    }
+
+    public static bool Edit(IWin32Window owner, CalendarEvent appointment)
+    {
+        using AppointmentAlarmDialog? dialog = new(appointment);
+
+        return dialog.ShowDialog(owner) == DialogResult.OK;
+    }
+
+    private void LoadValues()
+    {
+        _setAlarm.Checked = _appointment.AlarmEnabled;
+        _cancelAlarm.Checked = !_appointment.AlarmEnabled;
+        SelectItem(_amount, Math.Clamp(_appointment.AlarmAmount, 0, 999).ToString());
+        SelectItem(_unit, _appointment.AlarmUnit);
+        SelectItem(_tune, _appointment.AlarmTune);
+        _alarmDate.Value = _appointment.AlarmDate == default ? _appointment.Start.Date : _appointment.AlarmDate.Date;
+        _alarmTime.Value = DateTime.Today.Add((_appointment.AlarmTime == default ? _appointment.Start : _appointment.AlarmTime).TimeOfDay);
+        _message.Text = string.IsNullOrWhiteSpace(_appointment.AlarmMessage) ? _appointment.Title : _appointment.AlarmMessage;
+        _run.Text = _appointment.AlarmRunCommand;
+        _displayDialog.Checked = _appointment.AlarmDisplayDialog;
+        _before.Checked = _appointment.AlarmTiming == "Before";
+        _after.Checked = _appointment.AlarmTiming == "After";
+        _on.Checked = _appointment.AlarmTiming == "On" || (!_before.Checked && !_after.Checked);
+        _appointmentTime.Text = $"Appointment time {_appointment.Start:MMMM d, yyyy h:mm tt}";
+    }
+
+    private void SaveValues()
+    {
+        _appointment.AlarmEnabled = _setAlarm.Checked;
+        _appointment.AlarmAmount = int.TryParse(_amount.SelectedItem?.ToString(), out var amount) ? amount : 15;
+        _appointment.AlarmUnit = _unit.SelectedItem?.ToString() ?? "Minutes";
+        _appointment.AlarmTiming = _before.Checked ? "Before" : _after.Checked ? "After" : "On";
+        _appointment.AlarmTune = _tune.SelectedItem?.ToString() ?? "Default";
+        _appointment.AlarmDate = _alarmDate.Value.Date;
+        _appointment.AlarmTime = DateTime.Today.Add(_alarmTime.Value.TimeOfDay);
+        _appointment.AlarmMessage = _message.Text;
+        _appointment.AlarmRunCommand = _run.Text;
+        _appointment.AlarmDisplayDialog = _displayDialog.Checked;
+    }
+
+    private static void AddLabel(Control parent, string text, int x, int y) => parent.Controls.Add(new Label { Text = text, AutoSize = true, Location = new Point(x, y) });
+
+    private static void SelectItem(ComboBox control, string value)
+    {
+        int index = control.Items.Cast<object>().Select(item => item.ToString() ?? string.Empty).ToList().FindIndex(item => item.Equals(value, StringComparison.OrdinalIgnoreCase));
+
+        control.SelectedIndex = index >= 0 ? index : 0;
+    }
+
+    private static void SelectItem(DomainUpDown control, string value)
+    {
+        int index = control.Items.Cast<object>().Select(item => item.ToString() ?? string.Empty).ToList().FindIndex(item => item.Equals(value, StringComparison.OrdinalIgnoreCase));
+        control.SelectedIndex = index >= 0 ? index : 0;
+    }
+
+    private void ShowNotImplemented(string commandText) => MessageBox.Show(this, $"{commandText} is not yet implemented.", "Not Yet Implemented", MessageBoxButtons.OK, MessageBoxIcon.Information);
+}
+
+public sealed partial class CreateAppointmentDialog : Form
+{
+    private readonly CalendarEvent _appointment;
+    private readonly IReadOnlyCollection<CalendarEvent> _allAppointments;
+
+    private readonly DateTimePicker _date = new()
+    {
+        Format = DateTimePickerFormat.Short,
+        Width = 92
+    };
+
+    private readonly DateTimePicker _time = new()
+    {
+        Format = DateTimePickerFormat.Custom,
+        CustomFormat = "h:mm tt",
+        ShowUpDown = true,
+        Width = 74
+    };
+
+    private readonly DomainUpDown _duration = new()
+    {
+        ReadOnly = true,
+        TextAlign = HorizontalAlignment.Right,
+        Width = 54
+    };
+
+    private readonly TextBox _description = new() { Width = 360, Height = 86, Multiline = true, ScrollBars = ScrollBars.Vertical };
+    private readonly ComboBox _categories = new() { Width = 220 };
+    private readonly CheckBox _warnOfConflicts = new() { Text = "&Warn of conflicts", AutoSize = true };
+    private readonly CheckBox _pencilIn = new() { Text = "&Pencil in", AutoSize = true };
+    private readonly CheckBox _confidential = new() { Text = "Con&fidential", AutoSize = true };
+
+    private CreateAppointmentDialog(CalendarEvent appointment, string title, IReadOnlyCollection<CalendarEvent>? allAppointments)
+    {
+        _appointment = appointment;
+        _allAppointments = allAppointments ?? [];
+        Text = title;
+        Width = 560;
+        Height = 330;
+        StartPosition = FormStartPosition.CenterParent;
+        MinimizeBox = false;
+        MaximizeBox = false;
+        FormBorderStyle = FormBorderStyle.FixedDialog;
+
+        _categories.DropDownStyle = ComboBoxStyle.DropDown;
+        _categories.Items.AddRange(["Business", "Personal", "Holiday", "Travel", "Phone Call", "Meeting"]);
+        LoadDurationValues();
+
+        var body = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 5,
+            Padding = new Padding(12),
+            AutoSize = true
+        };
+
+        body.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 95));
+        body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
+        FlowLayoutPanel? schedulePanel = BuildSchedulePanel();
+
+        body.Controls.Add(schedulePanel, 0, 0);
+        body.SetColumnSpan(schedulePanel, 2);
+        AddRow(body, 1, "D&escription", _description);
+        AddRow(body, 2, "&Categories", _categories);
+
+        FlowLayoutPanel? flags = new() { FlowDirection = FlowDirection.LeftToRight, AutoSize = true, Dock = DockStyle.Fill };
+
+        flags.Controls.AddRange([_warnOfConflicts, _pencilIn, _confidential]);
+        body.Controls.Add(flags, 1, 3);
+
+        Button? linkButton = new() { Text = "Link to", Width = 90 };
+
+        linkButton.Click += (_, _) => ShowDialogStub("Link to");
+        body.Controls.Add(linkButton, 1, 4);
+
+        Button? okButton = new() { Text = "OK", Width = 78 };
+        Button? cancelButton = new() { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 78 };
+        Button? inviteButton = DialogButton("&Invite...");
+        Button? findTimeButton = DialogButton("Fi&nd Time");
+        Button? alarmButton = DialogButton("A&larm...", ShowAlarmDialog);
+        Button? repeatButton = DialogButton("&Repeat...");
+        Button? costButton = DialogButton("C&ost...");
+        Button? helpButton = DialogButton("&Help");
+
+        okButton.Click += (_, _) => SaveAndCloseIfValid();
+
+        var buttons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Right,
+            Width = 104,
+            Padding = new Padding(8, 12, 8, 8),
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false
+        };
+
+        buttons.Controls.Add(okButton);
+        buttons.Controls.Add(cancelButton);
+        buttons.Controls.Add(new Panel { Width = 82, Height = okButton.Height });
+        buttons.Controls.AddRange([inviteButton, findTimeButton, alarmButton, repeatButton, costButton, helpButton]);
+
+        AcceptButton = okButton;
+        CancelButton = cancelButton;
+        Controls.Add(buttons);
+        Controls.Add(body);
+        LoadValues();
+        Shown += (_, _) =>
+        {
+            _description.Focus();
+            _description.SelectionStart = _description.TextLength;
+            _description.SelectionLength = 0;
+        };
+    }
+
+    public static bool Edit(IWin32Window owner, CalendarEvent appointment, string title = "Create Appointment", IReadOnlyCollection<CalendarEvent>? allAppointments = null)
+    {
+        using CreateAppointmentDialog? dialog = new(appointment, title, allAppointments);
+
+        return dialog.ShowDialog(owner) == DialogResult.OK;
+    }
+
+    private FlowLayoutPanel BuildSchedulePanel()
+    {
+        FlowLayoutPanel? panel = new() { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, Margin = new Padding(0, 0, 0, 8) };
+
+        panel.Controls.Add(new Label { Text = "&Date", AutoSize = true, Padding = new Padding(0, 5, 1, 0) });
+        panel.Controls.Add(_date);
+        panel.Controls.Add(new Label { Text = "&Time", AutoSize = true, Padding = new Padding(6, 5, 1, 0) });
+        panel.Controls.Add(_time);
+        panel.Controls.Add(new Label { Text = "D&uration", AutoSize = true, Padding = new Padding(6, 5, 1, 0) });
+        panel.Controls.Add(BuildDurationPanel());
+
+        return panel;
+    }
+
+    private FlowLayoutPanel BuildDurationPanel()
+    {
+        FlowLayoutPanel? panel = new() { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, Margin = Padding.Empty };
+
+        panel.Controls.Add(_duration);
+
+        return panel;
+    }
+
+    private void LoadDurationValues()
+    {
+        _duration.Items.Clear();
+
+        for(var minutes = 5; minutes <= 24 * 60; minutes += 5)
+        {
+            _duration.Items.Add(FormatDuration(minutes));
+        }
+    }
+
+    private static void AddRow(TableLayoutPanel layout, int row, string labelText, Control control)
+    {
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.Controls.Add(new Label { Text = labelText, AutoSize = true, Anchor = AnchorStyles.Left, Padding = new Padding(0, 5, 0, 0) }, 0, row);
+        layout.Controls.Add(control, 1, row);
+    }
+
+    private Button DialogButton(string text, Action? action = null)
+    {
+        Button? button = new() { Text = text, Width = 82 };
+
+        button.Click += (_, _) => (action ?? (() => ShowDialogStub(text)))();
+
+        return button;
+    }
+
+    private void ShowAlarmDialog()
+    {
+        SaveValues();
+        _ = AppointmentAlarmDialog.Edit(this, _appointment);
+        LoadValues();
+    }
+
+    private void LoadValues()
+    {
+        _date.Value = _appointment.Start.Date;
+        _time.Value = DateTime.Today.Add(_appointment.Start.TimeOfDay);
+
+        int totalMinutes = Math.Clamp((int)Math.Max(5, (_appointment.End - _appointment.Start).TotalMinutes), 5, 24 * 60);
+
+        totalMinutes = (int)(Math.Round(totalMinutes / 5d) * 5);
+        _duration.SelectedItem = FormatDuration(totalMinutes);
+        _description.Text = _appointment.Title;
+        _categories.Text = _appointment.Categories;
+        _warnOfConflicts.Checked = _appointment.WarnOfConflicts;
+        _pencilIn.Checked = _appointment.PencilIn;
+        _confidential.Checked = _appointment.Confidential;
+    }
+
+    private void SaveValues()
+    {
+        var start = _date.Value.Date.Add(_time.Value.TimeOfDay);
+        var durationMinutes = ParseDurationMinutes(_duration.Text);
+
+        _appointment.Title = _description.Text;
+        _appointment.Start = start;
+        _appointment.End = start.AddMinutes(durationMinutes);
+        _appointment.Categories = _categories.Text;
+        _appointment.WarnOfConflicts = _warnOfConflicts.Checked;
+        _appointment.PencilIn = _pencilIn.Checked;
+        _appointment.Confidential = _confidential.Checked;
+    }
+
+    private void SaveAndCloseIfValid()
+    {
+        DateTime start = _date.Value.Date.Add(_time.Value.TimeOfDay);
+        DateTime end = start.AddMinutes(ParseDurationMinutes(_duration.Text));
+
+        if(_warnOfConflicts.Checked && HasTimeConflict(start, end, out var message))
+        {
+            DialogResult result = MessageBox.Show(
+                this,
+                message + Environment.NewLine + Environment.NewLine + "Save the appointment anyway?",
+                "Appointment Conflict",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning);
+
+            if(result != DialogResult.Yes) return;
+        }
+
+        SaveValues();
+        DialogResult = DialogResult.OK;
+        Close();
+    }
+
+    private bool HasTimeConflict(DateTime start, DateTime end, out string message)
+    {
+        List<CalendarEvent>? conflicts = _allAppointments
+            .Where(other => !ReferenceEquals(other, _appointment) && other.Id != _appointment.Id&&start < other.End && end > other.Start)
+            .OrderBy(other => other.Start)
+            .Take(5)
+            .ToList();
+
+        if(conflicts.Count == 0)
+        {
+            message = string.Empty;
+
+            return false;
+        }
+
+        StringBuilder? builder = new();
+
+        builder.AppendLine("This appointment conflicts with:");
+
+        foreach(var conflict in conflicts)
+        {
+            string? title = string.IsNullOrWhiteSpace(conflict.Title) ? "(Untitled)" : conflict.Title;
+
+            builder.AppendLine($"- {conflict.Start:g} - {conflict.End:t}: {title}");
+        }
+
+        message = builder.ToString();
+
+        return true;
+    }
+
+    private static int ParseDurationMinutes(string value)
+    {
+        string[]? parts = value.Split(':');
+        int hours = parts.Length > 0 && int.TryParse(parts[0], out var parsedHours) ? Math.Clamp(parsedHours, 0, 24) : 0;
+        int minutes = parts.Length > 1 && int.TryParse(parts[1], out var parsedMinutes) ? Math.Clamp(parsedMinutes, 0, 59) : 0;
+
+        minutes = (int)(Math.Round(minutes / 5d) * 5);
+
+        if(minutes == 60)
+        {
+            hours = Math.Min(24, hours + 1);
+            minutes = 0;
+        }
+
+        int totalMinutes = (hours * 60) + minutes;
+
+        return Math.Clamp(totalMinutes, 5, 24 * 60);
+    }
+
+    private static string FormatDuration(int totalMinutes) => $"{totalMinutes / 60:00}:{totalMinutes % 60:00}";
+
+    private void ShowDialogStub(string commandText)
+    {
+        var cleanText = commandText.Replace("&", string.Empty, StringComparison.Ordinal).Replace("...", string.Empty, StringComparison.Ordinal);
+
+        MessageBox.Show(this, $"{cleanText} is not yet implemented.", "Not Yet Implemented", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
 }
 
 internal enum CalendarViewMode
@@ -1871,20 +2368,21 @@ internal sealed partial class RecordEditorDialog : Form
         MaximizeBox = false;
         FormBorderStyle = FormBorderStyle.FixedDialog;
 
-        var layout = new TableLayoutPanel
+        TableLayoutPanel? layout = new()
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             Padding = new Padding(12),
             AutoScroll = true
         };
+
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
-        foreach(var property in record.GetType().GetProperties().Where(p => p.CanRead && p.CanWrite && p.Name != "Id"))
+        foreach(PropertyInfo property in record.GetType().GetProperties().Where(p => p.CanRead && p.CanWrite && p.Name != "Id"))
         {
-            var labelRow = layout.RowCount++;
-            var controlRow = layout.RowCount++;
-            var label = new Label
+            int labelRow = layout.RowCount++;
+            int controlRow = layout.RowCount++;
+            Label? label = new()
             {
                 Text = SplitName(property.Name),
                 AutoSize = true,
@@ -1893,7 +2391,8 @@ internal sealed partial class RecordEditorDialog : Form
                 Padding = new Padding(0, 8, 0, 2)
             };
 
-            var control = CreateControl(property, property.GetValue(record));
+            Control? control = CreateControl(property, property.GetValue(record));
+
             _controls[property] = control;
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -1901,11 +2400,13 @@ internal sealed partial class RecordEditorDialog : Form
             layout.Controls.Add(control, 0, controlRow);
         }
 
-        var okButton = new Button { Text = "OK", DialogResult = DialogResult.OK, Width = 90 };
-        var cancelButton = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 90 };
+        Button? okButton = new() { Text = "OK", DialogResult = DialogResult.OK, Width = 90 };
+        Button? cancelButton = new() { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 90 };
+
         okButton.Click += (_, _) => SaveValues();
 
-        var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 48, Padding = new Padding(8), FlowDirection = FlowDirection.RightToLeft };
+        FlowLayoutPanel? buttons = new() { Dock = DockStyle.Bottom, Height = 48, Padding = new Padding(8), FlowDirection = FlowDirection.RightToLeft };
+
         buttons.Controls.Add(cancelButton);
         buttons.Controls.Add(okButton);
 
@@ -1917,7 +2418,7 @@ internal sealed partial class RecordEditorDialog : Form
 
     public static bool Edit(IWin32Window owner, object record, string title)
     {
-        using var dialog = new RecordEditorDialog(record, title);
+        using RecordEditorDialog? dialog = new(record, title);
 
         return dialog.ShowDialog(owner) == DialogResult.OK;
     }
@@ -1926,7 +2427,7 @@ internal sealed partial class RecordEditorDialog : Form
     {
         if(property.PropertyType == typeof(DateTime))
         {
-            var datePicker = new DateTimePicker
+            DateTimePicker? datePicker = new()
             {
                 Value = value is DateTime date ? date : DateTime.Now,
                 Format = DateTimePickerFormat.Custom,
@@ -1936,6 +2437,7 @@ internal sealed partial class RecordEditorDialog : Form
 
             return datePicker;
         }
+
         if(property.PropertyType == typeof(bool)) return new CheckBox { Checked = value is true, Dock = DockStyle.Top };
 
         if(property.PropertyType == typeof(int))
@@ -1951,7 +2453,7 @@ internal sealed partial class RecordEditorDialog : Form
 
         if(property.Name == nameof(OrganizerTask.Priority))
         {
-            var priorityPanel = new FlowLayoutPanel
+            FlowLayoutPanel? priorityPanel = new()
             {
                 Dock = DockStyle.Top,
                 Height = 28,
@@ -1959,9 +2461,9 @@ internal sealed partial class RecordEditorDialog : Form
                 Tag = nameof(OrganizerTask.Priority)
             };
 
-            var selectedPriority = NormalizePriority(value?.ToString());
+            string? selectedPriority = NormalizePriority(value?.ToString());
 
-            foreach(var priority in new[] { "Low", "Medium", "High" })
+            foreach(string priority in new[] { "Low", "Medium", "High" })
             {
                 priorityPanel.Controls.Add(new RadioButton
                 {
@@ -1977,7 +2479,7 @@ internal sealed partial class RecordEditorDialog : Form
 
         if(property.Name == nameof(OrganizerTask.RepeatUnit))
         {
-            var repeatUnit = new ComboBox
+            ComboBox? repeatUnit = new()
             {
                 DropDownStyle = ComboBoxStyle.DropDownList,
                 Dock = DockStyle.Top
@@ -1985,12 +2487,13 @@ internal sealed partial class RecordEditorDialog : Form
 
             repeatUnit.Items.AddRange(["None", "Hours", "Days", "Weeks", "Months", "Years"]);
             repeatUnit.SelectedItem = NormalizeRepeatUnit(value?.ToString());
+
             return repeatUnit;
         }
 
         if(property.Name == nameof(Anniversary.Type))
         {
-            var type = new ComboBox
+            ComboBox? type = new()
             {
                 DropDownStyle = ComboBoxStyle.DropDown,
                 Dock = DockStyle.Top,
@@ -1998,6 +2501,7 @@ internal sealed partial class RecordEditorDialog : Form
             };
 
             type.Items.AddRange(["Anniversary", "Birthday", "Holiday", "Special Occasion"]);
+
             return type;
         }
 
@@ -2017,7 +2521,7 @@ internal sealed partial class RecordEditorDialog : Form
 
     private void SaveValues()
     {
-        foreach(var pair in _controls)
+        foreach(KeyValuePair<PropertyInfo, Control> pair in _controls)
         {
             object? value = pair.Value switch
             {
@@ -2034,10 +2538,7 @@ internal sealed partial class RecordEditorDialog : Form
         }
     }
 
-    private static string SplitName(string value)
-    {
-        return string.Concat(value.Select((ch, index) => index > 0 && char.IsUpper(ch) ? " " + ch : ch.ToString()));
-    }
+    private static string SplitName(string value) => string.Concat(value.Select((ch, index) => index > 0 && char.IsUpper(ch) ? " " + ch : ch.ToString()));
 
     private static string NormalizePriority(string? value)
     {
@@ -2049,10 +2550,7 @@ internal sealed partial class RecordEditorDialog : Form
         };
     }
 
-    private static string SelectedPriority(FlowLayoutPanel priorityPanel)
-    {
-        return priorityPanel.Controls.OfType<RadioButton>().FirstOrDefault(radioButton => radioButton.Checked)?.Tag?.ToString() ?? "Low";
-    }
+    private static string SelectedPriority(FlowLayoutPanel priorityPanel) => priorityPanel.Controls.OfType<RadioButton>().FirstOrDefault(radioButton => radioButton.Checked)?.Tag?.ToString() ?? "Low";
 
     private static string NormalizeRepeatUnit(string? value)
     {
@@ -2099,7 +2597,7 @@ internal sealed partial class PrinterSetupDialog : Form
         MaximizeBox = false;
         FormBorderStyle = FormBorderStyle.FixedDialog;
 
-        var layout = new TableLayoutPanel
+        TableLayoutPanel? layout = new()
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
@@ -2112,13 +2610,14 @@ internal sealed partial class PrinterSetupDialog : Form
         layout.Controls.Add(BuildOrientationGroup());
         layout.Controls.Add(BuildMarginsGroup());
 
-        var okButton = new Button { Text = "OK", DialogResult = DialogResult.OK, Width = 90 };
-        var cancelButton = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 90 };
-        var helpButton = new Button { Text = "&Help", Width = 90 };
+        Button? okButton = new() { Text = "OK", DialogResult = DialogResult.OK, Width = 90 };
+        Button? cancelButton = new() { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 90 };
+        Button? helpButton = new() { Text = "&Help", Width = 90 };
+
         okButton.Click += (_, _) => SaveValues();
         helpButton.Click += (_, _) => ShowNotImplemented("Help Topics");
 
-        var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 48, Padding = new Padding(8), FlowDirection = FlowDirection.RightToLeft };
+        FlowLayoutPanel? buttons = new() { Dock = DockStyle.Bottom, Height = 48, Padding = new Padding(8), FlowDirection = FlowDirection.RightToLeft };
         buttons.Controls.Add(helpButton);
         buttons.Controls.Add(cancelButton);
         buttons.Controls.Add(okButton);
@@ -2140,8 +2639,9 @@ internal sealed partial class PrinterSetupDialog : Form
 
     private GroupBox BuildPrinterGroup()
     {
-        var group = Group("Printer", 150);
-        var layout = Grid(3);
+        GroupBox? group = Group("Printer", 150);
+        TableLayoutPanel? layout = Grid(3);
+
         layout.Controls.Add(new Label { Text = "&Name:", AutoSize = true }, 0, 0);
         layout.Controls.Add(_printerName, 1, 0);
         layout.Controls.Add(Button("Properties...", () => ShowNotImplemented("Printer Properties")), 2, 0);
@@ -2155,18 +2655,21 @@ internal sealed partial class PrinterSetupDialog : Form
         layout.Controls.Add(_comment, 1, 4);
         _printerName.SelectedIndexChanged += (_, _) => UpdatePrinterDetails();
         group.Controls.Add(layout);
+
         return group;
     }
 
     private GroupBox BuildPaperGroup()
     {
-        var group = Group("Paper", 92);
-        var layout = Grid(2);
+        GroupBox? group = Group("Paper", 92);
+        TableLayoutPanel? layout = Grid(2);
+
         layout.Controls.Add(new Label { Text = "Si&ze:", AutoSize = true }, 0, 0);
         layout.Controls.Add(_paperSize, 1, 0);
         layout.Controls.Add(new Label { Text = "S&ource:", AutoSize = true }, 0, 1);
         layout.Controls.Add(_paperSource, 1, 1);
         group.Controls.Add(layout);
+
         return group;
     }
 
@@ -2177,13 +2680,15 @@ internal sealed partial class PrinterSetupDialog : Form
         panel.Controls.Add(_portrait);
         panel.Controls.Add(_landscape);
         group.Controls.Add(panel);
+
         return group;
     }
 
     private GroupBox BuildMarginsGroup()
     {
-        var group = Group("Margins (hundredths of an inch)", 98);
-        var layout = Grid(4);
+        GroupBox? group = Group("Margins (hundredths of an inch)", 98);
+        TableLayoutPanel? layout = Grid(4);
+
         layout.Controls.Add(new Label { Text = "&Left:", AutoSize = true }, 0, 0);
         layout.Controls.Add(_leftMargin, 1, 0);
         layout.Controls.Add(new Label { Text = "&Right:", AutoSize = true }, 2, 0);
@@ -2193,6 +2698,7 @@ internal sealed partial class PrinterSetupDialog : Form
         layout.Controls.Add(new Label { Text = "&Bottom:", AutoSize = true }, 2, 1);
         layout.Controls.Add(_bottomMargin, 3, 1);
         group.Controls.Add(layout);
+
         return group;
     }
 
@@ -2203,10 +2709,7 @@ internal sealed partial class PrinterSetupDialog : Form
             _printerName.Items.Add(printer);
         }
 
-        if(_printerName.Items.Count == 0)
-        {
-            _printerName.Items.Add("No printers installed");
-        }
+        if(_printerName.Items.Count == 0) _printerName.Items.Add("No printers installed");
     }
 
     private void LoadValues()
@@ -2239,10 +2742,12 @@ internal sealed partial class PrinterSetupDialog : Form
         if(!string.IsNullOrWhiteSpace(printerName) && _printerName.Items.Contains(printerName))
         {
             _printerName.SelectedItem = printerName;
+
             return;
         }
 
-        var printerSettings = new PrinterSettings();
+        PrinterSettings? printerSettings = new();
+
         _printerName.SelectedItem = _printerName.Items.Contains(printerSettings.PrinterName) ? printerSettings.PrinterName : _printerName.Items[0];
     }
 
@@ -2251,7 +2756,8 @@ internal sealed partial class PrinterSetupDialog : Form
         _paperSize.Items.Clear();
         _paperSource.Items.Clear();
 
-        var printerName = _printerName.SelectedItem?.ToString() ?? string.Empty;
+        string? printerName = _printerName.SelectedItem?.ToString() ?? string.Empty;
+
         if(string.IsNullOrWhiteSpace(printerName) || printerName == "No printers installed")
         {
             _status.Text = "Unavailable";
@@ -2262,10 +2768,12 @@ internal sealed partial class PrinterSetupDialog : Form
             _paperSource.Items.Add("Automatically Select");
             _paperSize.SelectedIndex = 0;
             _paperSource.SelectedIndex = 0;
+
             return;
         }
 
-        var settings = new PrinterSettings { PrinterName = printerName };
+        PrinterSettings? settings = new() { PrinterName = printerName };
+
         _status.Text = settings.IsValid ? "Ready" : "Unavailable";
         _type.Text = settings.IsPlotter ? "Plotter" : "Printer";
         _where.Text = settings.PrinterName;
@@ -2281,15 +2789,8 @@ internal sealed partial class PrinterSetupDialog : Form
             _paperSource.Items.Add(paperSource.SourceName);
         }
 
-        if(_paperSize.Items.Count == 0)
-        {
-            _paperSize.Items.Add("Letter");
-        }
-
-        if(_paperSource.Items.Count == 0)
-        {
-            _paperSource.Items.Add("Automatically Select");
-        }
+        if(_paperSize.Items.Count == 0) _paperSize.Items.Add("Letter");
+        if(_paperSource.Items.Count == 0) _paperSource.Items.Add("Automatically Select");
 
         SelectItem(_paperSize, _preferences.PaperSize, _paperSize.Items[0].ToString() ?? "Letter");
         SelectItem(_paperSource, _preferences.PaperSource, _paperSource.Items[0].ToString() ?? "Automatically Select");
@@ -2299,8 +2800,9 @@ internal sealed partial class PrinterSetupDialog : Form
 
     private static TableLayoutPanel Grid(int columns)
     {
-        var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = columns, AutoSize = true };
-        for(var index = 0; index < columns; index++)
+        TableLayoutPanel? grid = new() { Dock = DockStyle.Fill, ColumnCount = columns, AutoSize = true };
+
+        for(int index = 0; index < columns; index++)
         {
             grid.ColumnStyles.Add(index % 2 == 0 ? new ColumnStyle(SizeType.AutoSize) : new ColumnStyle(SizeType.Percent, 100));
         }
@@ -2310,8 +2812,10 @@ internal sealed partial class PrinterSetupDialog : Form
 
     private Button Button(string text, Action action)
     {
-        var button = new Button { Text = text, Width = 90 };
+        Button? button = new() { Text = text, Width = 90 };
+
         button.Click += (_, _) => action();
+
         return button;
     }
 
@@ -2325,4 +2829,337 @@ internal sealed partial class PrinterSetupDialog : Form
     }
 
     private void ShowNotImplemented(string commandText) => MessageBox.Show(this, $"{commandText.Replace("&", string.Empty, StringComparison.Ordinal).Replace("...", string.Empty, StringComparison.Ordinal)} is not yet implemented.", "Not Yet Implemented", MessageBoxButtons.OK, MessageBoxIcon.Information);
+}
+
+internal sealed class OrganizerPreferencesDialog : Form
+{
+    private readonly OrganizerPreferences _preferences;
+    private readonly ComboBox _webBrowser = DropDown(["System default", "Internet Explorer", "Netscape Navigator", "Other"]);
+    private readonly CheckBox _useFirewall = new() { Text = "&Connect to the Internet through a firewall", AutoSize = true };
+    private readonly TextBox _proxyServer = new();
+    private readonly NumericUpDown _proxyPort = new() { Minimum = 0, Maximum = 65535 };
+    private readonly TextBox _proxyBypassDomains = new() { Multiline = true, Height = 60, ScrollBars = ScrollBars.Vertical };
+    private readonly ComboBox _favoriteAlarmTune = DropDown(["Default", "Chime", "Ding", "Notify"]);
+    private readonly CheckBox _displayMissedAlarms = new() { Text = "Displa&y missed alarms", AutoSize = true };
+    private readonly TextBox _organizerFilesPath = new();
+    private readonly TextBox _paperLayoutsPath = new();
+    private readonly TextBox _customSmartIconsPath = new();
+    private readonly TextBox _backupsPath = new();
+    private readonly CheckBox _animatedPageTurn = new() { Text = "A&nimated page turn", AutoSize = true };
+    private readonly RadioButton _plainPointer = new() { Text = "&Plain", AutoSize = true };
+    private readonly RadioButton _colorPointer = new() { Text = "&Color", AutoSize = true };
+    private readonly RadioButton _animatedPointer = new() { Text = "&Animated", AutoSize = true };
+    private readonly ComboBox _weekStartsOn = DropDown(["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]);
+    private readonly CheckBox _muteOrganizerSounds = new() { Text = "&Mute Organizer sounds", AutoSize = true };
+    private readonly CheckBox _autoCompleteContactNames = new() { Text = "&For Contacts, automatically complete names as they are typed.", AutoSize = true };
+    private readonly CheckBox _automaticallyOpen = new() { Text = "&Automatically open", AutoSize = true };
+    private readonly TextBox _automaticallyOpenPath = new();
+    private readonly CheckBox _alwaysStartWithNewOrganizerFile = new() { Text = "Always start with a &new Organizer file", AutoSize = true };
+    private readonly TextBox _baseNewOrganizersOnPath = new();
+    private readonly CheckBox _createBackupWhenClosed = new() { Text = "C&reate backup when closed", AutoSize = true };
+
+    private OrganizerPreferencesDialog(OrganizerPreferences preferences)
+    {
+        _preferences = preferences;
+        Text = "Organizer Preferences";
+        Width = 680;
+        Height = 560;
+        StartPosition = FormStartPosition.CenterParent;
+        MinimizeBox = false;
+        MaximizeBox = false;
+        FormBorderStyle = FormBorderStyle.FixedDialog;
+
+        TabControl? tabs = new() { Dock = DockStyle.Fill, Padding = new Point(12, 4) };
+        tabs.TabPages.Add(BuildDefaultFilePage());
+        tabs.TabPages.Add(BuildEnvironmentPage());
+        tabs.TabPages.Add(BuildFoldersPage());
+        tabs.TabPages.Add(BuildAlarmPage());
+        tabs.TabPages.Add(BuildWebBrowsingPage());
+
+        Button? okButton = new() { Text = "OK", DialogResult = DialogResult.OK, Width = 90 };
+        Button? cancelButton = new() { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 90 };
+        Button? helpButton = new() { Text = "&Help", Width = 90 };
+
+        okButton.Click += (_, _) => SaveValues();
+        helpButton.Click += (_, _) => ShowDialogStub("Help Topics");
+
+        FlowLayoutPanel? buttons = new() { Dock = DockStyle.Bottom, Height = 48, Padding = new Padding(8), FlowDirection = FlowDirection.RightToLeft };
+        buttons.Controls.Add(helpButton);
+        buttons.Controls.Add(cancelButton);
+        buttons.Controls.Add(okButton);
+
+        AcceptButton = okButton;
+        CancelButton = cancelButton;
+        Controls.Add(tabs);
+        Controls.Add(buttons);
+        LoadValues();
+    }
+
+    public static bool Edit(IWin32Window owner, OrganizerPreferences preferences)
+    {
+        using OrganizerPreferencesDialog? dialog = new (preferences);
+
+        return dialog.ShowDialog(owner) == DialogResult.OK;
+    }
+
+    private TabPage BuildWebBrowsingPage()
+    {
+        TabPage? page = Page("Web Browsing");
+        FlowLayoutPanel? body = Body(page);
+        ListBox? entries = new() { Height = 92 };
+
+        AddLabeled(body, "Web &browser", _webBrowser);
+        body.Controls.Add(Label("Use &Web entries stored in these files to log into protected Web sites"));
+        body.Controls.Add(Sized(entries));
+        body.Controls.Add(ButtonRow(Button("&Add..."), Button("&Remove"), Button("&Update Organizer's Web entry references on this computer")));
+        body.Controls.Add(_useFirewall);
+        AddLabeled(body, "Web pro&xy server", _proxyServer);
+        AddLabeled(body, "&Port", _proxyPort);
+        AddLabeled(body, "B&ypass proxy\r\nfor these domains", _proxyBypassDomains);
+        body.Controls.Add(Label("Use this browser to launch Web URLs from within Organizer"));
+        return page;
+    }
+
+    private TabPage BuildAlarmPage()
+    {
+        var page = Page("Alarms");
+        var body = Body(page);
+        AddLabeled(body, "&Favorite alarm tune:", _favoriteAlarmTune);
+        body.Controls.Add(ButtonRow(Button("Play", () => System.Media.SystemSounds.Asterisk.Play()), Button("Bro&wse...")));
+        body.Controls.Add(_displayMissedAlarms);
+        body.Controls.Add(Label("Use these Alarm settings as defaults"));
+        body.Controls.Add(BuildAlarmDefaultsGrid());
+
+        return page;
+    }
+
+    private TabPage BuildFoldersPage()
+    {
+        TabPage? page = Page("Folders");
+        FlowLayoutPanel? body = Body(page);
+
+        AddPathRow(body, "&Organizer files", _organizerFilesPath, "B&rowse...");
+        AddPathRow(body, "&Paper layouts", _paperLayoutsPath, "Bro&wse...");
+        AddPathRow(body, "Custom Smart&Icons", _customSmartIconsPath, "Brow&se...");
+        AddPathRow(body, "&Backups", _backupsPath, "Brows&e...");
+
+        return page;
+    }
+
+    private TabPage BuildEnvironmentPage()
+    {
+        TabPage? page = Page("Environment");
+        FlowLayoutPanel? body = Body(page);
+
+        body.Controls.Add(_animatedPageTurn);
+        body.Controls.Add(Label("Mouse pointer"));
+        body.Controls.Add(ButtonRow(_plainPointer, _colorPointer, _animatedPointer));
+        AddLabeled(body, "Wee&k starts on", _weekStartsOn);
+        body.Controls.Add(Label("&Sounds"));
+
+        ListBox? sounds = new() { Height = 70 };
+
+        sounds.Items.AddRange(["Appointment alarm", "Task alarm", "Page turn", "Error"]);
+        body.Controls.Add(Sized(sounds));
+        body.Controls.Add(ButtonRow(Button("Pla&y", () => System.Media.SystemSounds.Asterisk.Play()), Button("S&top"), Button("So&unds...")));
+        body.Controls.Add(_muteOrganizerSounds);
+        body.Controls.Add(_autoCompleteContactNames);
+
+        return page;
+    }
+
+    private TabPage BuildDefaultFilePage()
+    {
+        var page = Page("Default File");
+        var body = Body(page);
+        body.Controls.Add(_automaticallyOpen);
+        AddPathRow(body, string.Empty, _automaticallyOpenPath, "B&rowse...");
+        body.Controls.Add(_alwaysStartWithNewOrganizerFile);
+        AddPathRow(body, "&Base new Organizers on", _baseNewOrganizersOnPath, "Br&owse...");
+        body.Controls.Add(Label("Backup"));
+        body.Controls.Add(_createBackupWhenClosed);
+        body.Controls.Add(ButtonRow(Button("&Make backup now")));
+
+        return page;
+    }
+
+    private static TabPage Page(string text)
+    {
+        TabPage? page = new(text)
+        {
+            Padding = new Padding(12),
+            BackColor = SystemColors.Control
+        };
+
+        page.Controls.Add(new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoScroll = true,
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false
+        });
+
+        return page;
+    }
+
+    private static FlowLayoutPanel Body(TabPage page) => (FlowLayoutPanel)page.Controls[0];
+
+    private static Label Label(string text) => new() { Text = text, AutoSize = true, Margin = new Padding(0, 8, 0, 2) };
+
+    private static T Sized<T>(T control) where T : Control
+    {
+        control.Width = 590;
+        return control;
+    }
+
+    private TableLayoutPanel BuildAlarmDefaultsGrid()
+    {
+        TableLayoutPanel? grid = new() { ColumnCount = 5, RowCount = 6, Dock = DockStyle.Top, AutoSize = true };
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 105));
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 105));
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
+        grid.Controls.Add(new Label { Text = "Section", AutoSize = true }, 0, 0);
+        grid.Controls.Add(new Label { Text = "Set Alarm", AutoSize = true }, 1, 0);
+        grid.Controls.Add(new Label { Text = "Amount", AutoSize = true }, 2, 0);
+        grid.Controls.Add(new Label { Text = "Unit", AutoSize = true }, 3, 0);
+        grid.Controls.Add(new Label { Text = "When", AutoSize = true }, 4, 0);
+
+        int row = 1;
+        foreach(string section in new[] { "A&nniversary", "&Appointment", "Ca&ll", "&Event", "&Task" })
+        {
+            grid.Controls.Add(new Label { Text = section, AutoSize = true, Padding = new Padding(0, 4, 0, 0) }, 0, row);
+            grid.Controls.Add(new CheckBox { Text = "On", AutoSize = true }, 1, row);
+            grid.Controls.Add(new NumericUpDown { Minimum = 0, Maximum = 999, Value = 15, Width = 70 }, 2, row);
+            grid.Controls.Add(DropDown(["Minutes", "Hours", "Days"]), 3, row);
+            grid.Controls.Add(DropDown(["Before", "After"]), 4, row);
+            row++;
+        }
+
+        return grid;
+    }
+
+    private static void AddLabeled(Control parent, string text, Control control)
+    {
+        parent.Controls.Add(Label(text));
+        control.Width = 590;
+        parent.Controls.Add(control);
+    }
+
+    private void AddPathRow(Control parent, string label, TextBox textBox, string buttonText)
+    {
+        var panel = new TableLayoutPanel { Width = 590, Height = 30, ColumnCount = 2 };
+        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 92));
+        textBox.Dock = DockStyle.Fill;
+        panel.Controls.Add(textBox, 0, 0);
+
+        if(!string.IsNullOrWhiteSpace(label)) parent.Controls.Add(Label(label));
+
+        panel.Controls.Add(BrowseButton(buttonText, textBox), 1, 0);
+        parent.Controls.Add(panel);
+    }
+
+    private static FlowLayoutPanel ButtonRow(params Control[] controls)
+    {
+        FlowLayoutPanel? panel = new() { Width = 590, Height = 34, FlowDirection = FlowDirection.LeftToRight };
+
+        panel.Controls.AddRange(controls);
+
+        return panel;
+    }
+
+    private Button Button(string text, Action? action = null)
+    {
+        var button = new Button { Text = text, Width = Math.Max(90, TextRenderer.MeasureText(text.Replace("&", string.Empty, StringComparison.Ordinal), SystemFonts.MessageBoxFont).Width + 24) };
+        button.Click += (_, _) => (action ?? (() => ShowDialogStub(text)))();
+
+        return button;
+    }
+
+    private Button BrowseButton(string text, TextBox target)
+    {
+        Button? button = Button(text, () =>
+        {
+            using var dialog = new FolderBrowserDialog { SelectedPath = Directory.Exists(target.Text) ? target.Text : Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments) };
+
+            if(dialog.ShowDialog(this) == DialogResult.OK) target.Text = dialog.SelectedPath;
+        });
+
+        button.Width = 88;
+
+        return button;
+    }
+
+    private static ComboBox DropDown(string[] values)
+    {
+        var comboBox = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+        comboBox.Items.AddRange(values);
+
+        if(comboBox.Items.Count > 0) comboBox.SelectedIndex = 0;
+
+        return comboBox;
+    }
+
+    private void LoadValues()
+    {
+        SelectItem(_webBrowser, _preferences.WebBrowser);
+        _useFirewall.Checked = _preferences.UseFirewall;
+        _proxyServer.Text = _preferences.ProxyServer;
+        _proxyPort.Value = Math.Clamp(_preferences.ProxyPort, (int)_proxyPort.Minimum, (int)_proxyPort.Maximum);
+        _proxyBypassDomains.Text = _preferences.ProxyBypassDomains;
+        SelectItem(_favoriteAlarmTune, _preferences.FavoriteAlarmTune);
+        _displayMissedAlarms.Checked = _preferences.DisplayMissedAlarms;
+        _organizerFilesPath.Text = _preferences.OrganizerFilesPath;
+        _paperLayoutsPath.Text = _preferences.PaperLayoutsPath;
+        _customSmartIconsPath.Text = _preferences.CustomSmartIconsPath;
+        _backupsPath.Text = _preferences.BackupsPath;
+        _animatedPageTurn.Checked = _preferences.AnimatedPageTurn;
+        _plainPointer.Checked = _preferences.MousePointer == "Plain";
+        _animatedPointer.Checked = _preferences.MousePointer == "Animated";
+        _colorPointer.Checked = !_plainPointer.Checked && !_animatedPointer.Checked;
+        SelectItem(_weekStartsOn, _preferences.WeekStartsOn);
+        _muteOrganizerSounds.Checked = _preferences.MuteOrganizerSounds;
+        _autoCompleteContactNames.Checked = _preferences.AutoCompleteContactNames;
+        _automaticallyOpen.Checked = _preferences.AutomaticallyOpen;
+        _automaticallyOpenPath.Text = _preferences.AutomaticallyOpenPath;
+        _alwaysStartWithNewOrganizerFile.Checked = _preferences.AlwaysStartWithNewOrganizerFile;
+        _baseNewOrganizersOnPath.Text = _preferences.BaseNewOrganizersOnPath;
+        _createBackupWhenClosed.Checked = _preferences.CreateBackupWhenClosed;
+    }
+
+    private void SaveValues()
+    {
+        _preferences.WebBrowser = _webBrowser.SelectedItem?.ToString() ?? "System default";
+        _preferences.UseFirewall = _useFirewall.Checked;
+        _preferences.ProxyServer = _proxyServer.Text;
+        _preferences.ProxyPort = (int)_proxyPort.Value;
+        _preferences.ProxyBypassDomains = _proxyBypassDomains.Text;
+        _preferences.FavoriteAlarmTune = _favoriteAlarmTune.SelectedItem?.ToString() ?? "Default";
+        _preferences.DisplayMissedAlarms = _displayMissedAlarms.Checked;
+        _preferences.OrganizerFilesPath = _organizerFilesPath.Text;
+        _preferences.PaperLayoutsPath = _paperLayoutsPath.Text;
+        _preferences.CustomSmartIconsPath = _customSmartIconsPath.Text;
+        _preferences.BackupsPath = _backupsPath.Text;
+        _preferences.AnimatedPageTurn = _animatedPageTurn.Checked;
+        _preferences.MousePointer = _plainPointer.Checked ? "Plain" : _animatedPointer.Checked ? "Animated" : "Color";
+        _preferences.WeekStartsOn = _weekStartsOn.SelectedItem?.ToString() ?? "Sunday";
+        _preferences.MuteOrganizerSounds = _muteOrganizerSounds.Checked;
+        _preferences.AutoCompleteContactNames = _autoCompleteContactNames.Checked;
+        _preferences.AutomaticallyOpen = _automaticallyOpen.Checked;
+        _preferences.AutomaticallyOpenPath = _automaticallyOpenPath.Text;
+        _preferences.AlwaysStartWithNewOrganizerFile = _alwaysStartWithNewOrganizerFile.Checked;
+        _preferences.BaseNewOrganizersOnPath = _baseNewOrganizersOnPath.Text;
+        _preferences.CreateBackupWhenClosed = _createBackupWhenClosed.Checked;
+    }
+
+    private static void SelectItem(ComboBox comboBox, string value) => comboBox.SelectedItem = comboBox.Items.Cast<object>().FirstOrDefault(item => string.Equals(item.ToString(), value, StringComparison.OrdinalIgnoreCase)) ?? comboBox.Items[0];
+
+    private void ShowDialogStub(string commandText)
+    {
+        string? cleanText = commandText.Split('\t')[0].Replace("&", string.Empty, StringComparison.Ordinal).Replace("...", string.Empty, StringComparison.Ordinal);
+
+        MessageBox.Show(this, $"{cleanText} is not yet implemented.", "Not Yet Implemented", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
 }

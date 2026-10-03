@@ -11,8 +11,9 @@
 	<Company>Forest City Software</Company>
 	<Copyright>Forest City Software</Copyright>
 	<Description>Forest City Software's version of Organizer.</Description>
-	<ApplicationIcon>ForestCitySoftware.ico</ApplicationIcon>
+	<ApplicationIcon>images\Organizer.ico</ApplicationIcon>
 	<PackageReadmeFile>README.md</PackageReadmeFile>
+	<SupportedOSPlatformVersion>7.0</SupportedOSPlatformVersion>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
@@ -40,7 +41,7 @@
     <Content Include="About\Contributors.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="ForestCitySoftware.ico" />
+    <Content Include="images\Organizer.ico" />
   </ItemGroup>
 
   <ItemGroup>

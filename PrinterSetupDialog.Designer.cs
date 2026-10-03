@@ -28,8 +28,17 @@ internal sealed partial class PrinterSetupDialog
     /// </summary>
     private void InitializeComponent()
     {
-        components = new System.ComponentModel.Container();
+        System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(PrinterSetupDialog));
+        SuspendLayout();
+        // 
+        // PrinterSetupDialog
+        // 
+        AutoScaleDimensions = new SizeF(7F, 15F);
         AutoScaleMode = AutoScaleMode.Font;
+        ClientSize = new Size(284, 261);
+        Icon = (Icon)resources.GetObject("$this.Icon");
+        Name = "PrinterSetupDialog";
+        ResumeLayout(false);
     }
 
     #endregion

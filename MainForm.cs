@@ -1,6 +1,6 @@
 using System.ComponentModel;
 using System.Drawing.Printing;
-using System.Reflection;
+using System.Linq;
 using System.Text;
 using Organizer.About;
 
@@ -13,14 +13,237 @@ public sealed partial class MainForm : Form
     private Action _refreshCalendar = () => { };
     private readonly Dictionary<string, BindingSource> _sectionSources = [];
     private TabControl _tabs = null!;
+    private CalendarPlannerView? _planner;
+
+    // Binder panel collapse state
+    private int _binderPanelLastWidth = 260;
+
+    private bool _binderPanelCollapsed = false;
+
+    // Reference to the View menu item so we can update its text when toggling
+    private ToolStripMenuItem? _collapseBinderPanelMenuItem;
+
+    // Appointment menu items that reflect the currently-focused appointment state
+    private ToolStripMenuItem? _warnOfConflictsMenuItem;
+
+    private ToolStripMenuItem? _pencilInMenuItem;
+    private ToolStripMenuItem? _confidentialMenuItem;
+
+    // Current focused appointment (kept at instance scope so menu updates can be driven from anywhere)
+    private CalendarEvent? _selectedCalendarEvent;
+
+    // Update the appointment-related menu items to reflect the current focused appointment
+    private void UpdateAppointmentMenuItems()
+    {
+        bool hasEvent = _selectedCalendarEvent is not null;
+
+        if(_warnOfConflictsMenuItem is not null)
+        {
+            _warnOfConflictsMenuItem.Enabled = hasEvent;
+            _warnOfConflictsMenuItem.Checked = _selectedCalendarEvent?.WarnOfConflicts ?? false;
+        }
+
+        if(_pencilInMenuItem is not null)
+        {
+            _pencilInMenuItem.Enabled = hasEvent;
+            _pencilInMenuItem.Checked = _selectedCalendarEvent?.PencilIn ?? false;
+        }
+
+        if(_confidentialMenuItem is not null)
+        {
+            _confidentialMenuItem.Enabled = hasEvent;
+            _confidentialMenuItem.Checked = _selectedCalendarEvent?.Confidential ?? false;
+        }
+    }
+
+    // Small clickable label placed above the calendar to toggle the binder panel
+    private Label? _binderToggleLabel;
+
+    // Stores original visibility of left-panel child controls when collapsed so we can restore on expand
+    private Dictionary<Control, bool>? _leftPanelChildVisibility;
+
+    // Animation for collapsing/expanding the left binder panel
+    private System.Windows.Forms.Timer? _binderAnimationTimer;
+
+    private int _binderAnimationTargetWidth = 0;
+    private bool _binderAnimationExpanding = false;
+
+    // Shared tooltip for small UI elements
+    private ToolTip? _toolTip;
+
+    // Drag/drop support for tab reordering
+    private int _dragTabIndex = -1;
+
+    private Point _dragStartPoint;
     private Action<CalendarViewMode> _setCalendarView = _ => { };
     private Action<int> _moveCalendar = _ => { };
     private Action _goToday = () => { };
     private string _currentFilePath;
 
+    // Trash animation
+    private System.Windows.Forms.Timer _trashAnimationTimer = null!;
+
+    private int _trashAnimationTick = 0;
+    private bool _trashAnimating = false;
+    private TrashDropPayload? _clipboardPayload = null;
+    private Control? _trashDropControl = null;
+
+    private static DayOfWeek ParseWeekStarts(OrganizerData? data)
+    {
+        if(data?.Preferences is not null && !string.IsNullOrWhiteSpace(data.Preferences.WeekStartsOn))
+        {
+            if(Enum.TryParse<DayOfWeek>(data.Preferences.WeekStartsOn, true, out var day))
+            {
+                return day;
+            }
+        }
+
+        return DayOfWeek.Sunday;
+    }
+
+    private void StartBinderAnimation(int targetWidth, bool expanding)
+    {
+        try
+        {
+            // Initialize timer if needed
+            if(_binderAnimationTimer is null)
+            {
+                _binderAnimationTimer = new System.Windows.Forms.Timer { Interval = 15 };
+                _binderAnimationTimer.Tick += (_, _) =>
+                {
+                    try
+                    {
+                        if(designerCalendarLeftPanel is null) return;
+
+                        int current = designerCalendarLeftPanel.Width;
+                        int target = _binderAnimationTargetWidth;
+
+                        if(current == target)
+                        {
+                            _binderAnimationTimer?.Stop();
+                            _binderAnimationAnimating = false;
+
+                            // Finalize state
+                            if(_binderAnimationExpanding)
+                            {
+                                // Restore children visibility
+                                try
+                                {
+                                    if(_leftPanelChildVisibility is not null)
+                                    {
+                                        foreach(var kvp in _leftPanelChildVisibility)
+                                        {
+                                            try { if(kvp.Key is not null) kvp.Key.Visible = kvp.Value; } catch { }
+                                        }
+
+                                        _leftPanelChildVisibility = null;
+                                    }
+                                    else
+                                    {
+                                        foreach(Control c in designerCalendarLeftPanel.Controls)
+                                        {
+                                            if(object.ReferenceEquals(c, _binderToggleLabel)) continue;
+                                            c.Visible = true;
+                                        }
+                                    }
+                                }
+                                catch { }
+
+                                // Restore min size
+                                try { designerCalendarLeftPanel.MinimumSize = new Size(_binderPanelLastWidth > 0 ? _binderPanelLastWidth : 260, 0); } catch { }
+                                _binderPanelCollapsed = false;
+                            }
+                            else
+                            {
+                                // Collapsed: ensure only glyph remains visible
+                                try
+                                {
+                                    foreach(Control c in designerCalendarLeftPanel.Controls)
+                                    {
+                                        if(object.ReferenceEquals(c, _binderToggleLabel)) { c.Visible = true; continue; }
+                                        c.Visible = false;
+                                    }
+                                }
+                                catch { }
+
+                                // Tighten minimum size to the glyph width
+                                try { if(_binderToggleLabel is not null) designerCalendarLeftPanel.MinimumSize = new Size(Math.Max(24, _binderToggleLabel.Width + 8), 0); } catch { }
+                                _binderPanelCollapsed = true;
+                            }
+
+                            // Update view/menu/glyph after animation finishes
+                            try
+                            {
+                                if(_collapseBinderPanelMenuItem is not null) _collapseBinderPanelMenuItem.Text = _binderPanelCollapsed ? "Expand Binder Panel\tF12" : "Collapse Binder Panel\tF12";
+                                if(_binderToggleLabel is not null) _binderToggleLabel.Text = _binderPanelCollapsed ? "\u25B6" : "\u25BC";
+                            }
+                            catch { }
+
+                            designerCalendarLeftPanel.Parent?.PerformLayout();
+                            _tabs.Parent?.PerformLayout();
+                            _tabs.Invalidate();
+
+                            return;
+                        }
+
+                        // Move towards target using an easing step
+                        int diff = target - current;
+                        int step = Math.Max(1, Math.Abs(diff) / 6);
+                        int next = current + Math.Sign(diff) * step;
+                        // Clamp to target
+                        if((diff > 0 && next > target) || (diff < 0 && next < target)) next = target;
+
+                        try { designerCalendarLeftPanel.Width = next; } catch { }
+                    }
+                    catch { }
+                };
+            }
+
+            _binderAnimationTargetWidth = targetWidth;
+            _binderAnimationExpanding = expanding;
+            _binderAnimationAnimating = true;
+
+            // Ensure layout does not prevent the animation: relax minimum size before animating
+            try { designerCalendarLeftPanel.MinimumSize = new Size(0, 0); } catch { }
+
+            _binderAnimationTimer.Start();
+        }
+        catch { }
+    }
+
+    // Tracks active animation
+    private bool _binderAnimationAnimating = false;
+
+    private static System.Windows.Forms.Day ConvertToWinFormsDay(DayOfWeek dow)
+    {
+        return dow switch
+        {
+            DayOfWeek.Sunday => System.Windows.Forms.Day.Sunday,
+            DayOfWeek.Monday => System.Windows.Forms.Day.Monday,
+            DayOfWeek.Tuesday => System.Windows.Forms.Day.Tuesday,
+            DayOfWeek.Wednesday => System.Windows.Forms.Day.Wednesday,
+            DayOfWeek.Thursday => System.Windows.Forms.Day.Thursday,
+            DayOfWeek.Friday => System.Windows.Forms.Day.Friday,
+            DayOfWeek.Saturday => System.Windows.Forms.Day.Saturday,
+            _ => System.Windows.Forms.Day.Default,
+        };
+    }
+
     public MainForm()
     {
         InitializeComponent();
+
+        // Remove designer-introduced padding/margins so the left binder content uses the full panel width
+        try
+        {
+            designerCalendarLeftPanel.Padding = Padding.Empty;
+            designerNavigationPanel.Padding = Padding.Empty;
+            designerNavigationPanel.Margin = Padding.Empty;
+            designerMonthCalendar.Margin = Padding.Empty;
+            designerPreviousButton.Margin = Padding.Empty;
+            designerNextButton.Margin = Padding.Empty;
+        }
+        catch { }
 
         if(LicenseManager.UsageMode == LicenseUsageMode.Designtime)
         {
@@ -39,7 +262,7 @@ public sealed partial class MainForm : Form
         Height = 700;
         StartPosition = FormStartPosition.CenterScreen;
 
-        MenuStrip? menuStrip = BuildMainMenu();
+        MenuStrip? menuStrip = null;
         ToolStrip? iconLine = BuildIconLine();
 
         _tabs = new TabControl { Dock = DockStyle.Fill, Alignment = TabAlignment.Right, Multiline = true };
@@ -48,10 +271,104 @@ public sealed partial class MainForm : Form
         _tabs.TabPages.Add(BuildTab("Contacts", _data.Contacts));
         _tabs.TabPages.Add(BuildNotepadTab());
 
-        Controls.Add(_tabs);
+        // Restore last selected section if present
+        try
+        {
+            var last = _data.Preferences?.LastSection;
+            if(!string.IsNullOrWhiteSpace(last))
+            {
+                int idx = _tabs.TabPages.Cast<TabPage>().ToList().FindIndex(tp => string.Equals(tp.Text, last, StringComparison.OrdinalIgnoreCase));
+                if(idx >= 0) _tabs.SelectedIndex = idx;
+            }
+        }
+        catch { }
+
+        // Persist section selection when user changes tabs
+        try
+        {
+            _tabs.SelectedIndexChanged += (_, _) =>
+            {
+                try
+                {
+                    var txt = _tabs.SelectedTab?.Text;
+                    if(!string.IsNullOrWhiteSpace(txt)) { _data.Preferences.LastSection = txt; _store.Save(_data); }
+                }
+                catch { }
+            };
+        }
+        catch { }
+
+        // Disable drag & drop of tabs — item-level drag/drop is supported instead
+        _tabs.AllowDrop = false;
+
+        // Create a content container so the left panel and tabs dock correctly
+        Panel content = new() { Dock = DockStyle.Fill };
+        // Add the tab control first, then the left panel so docking/z-order doesn't allow the left panel to overlap the Fill area
+        content.Controls.Add(_tabs);
+        content.Controls.Add(designerCalendarLeftPanel);
+
+        // Ensure the left binder panel keeps the expected designer width so the MonthCalendar isn't clipped
+        try
+        {
+            // Narrow the left binder panel to 220px as requested
+            const int leftPanelWidth = 220;
+            designerCalendarLeftPanel.MinimumSize = new Size(leftPanelWidth, 0);
+            designerCalendarLeftPanel.Width = leftPanelWidth;
+            _binderPanelLastWidth = leftPanelWidth;
+
+            // Ensure navigation and month calendar adjust to the panel: rely on docking/anchoring instead of forcing widths
+            try
+            {
+                designerNavigationPanel.AutoSize = true;
+                designerNavigationPanel.AutoSizeMode = AutoSizeMode.GrowOnly;
+                designerNavigationPanel.Padding = Padding.Empty;
+                designerMonthCalendar.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            }
+            catch { }
+
+            // Force layout so the tab control correctly fills remaining space and does not get overlapped
+            try
+            {
+                content.PerformLayout();
+                _tabs.BringToFront();
+                _tabs.Invalidate();
+            }
+            catch { }
+            // Note: glyph and runtime tooltips are created in BuildCalendarTab after the left panel is populated
+        }
+        catch { }
+
+        // Now that tabs have been created, build the main menu so the "Turn To" submenu
+        // can be populated from the actual tab pages.
+        try { menuStrip = BuildMainMenu(); } catch { menuStrip = null; }
+
+        Controls.Add(content);
         Controls.Add(iconLine);
         Controls.Add(menuStrip);
+        // Hide designer-created trash label (we use a runtime trash target in the left panel)
+        designerTrashLabel.Visible = false;
+
+        // Setup trash hover animation (pulsing icon)
+        _trashAnimationTimer = new System.Windows.Forms.Timer { Interval = 80 };
+        _trashAnimationTimer.Tick += (_, _) =>
+        {
+            _trashAnimationTick++;
+            _trashDropControl?.Invalidate();
+        };
+
         MainMenuStrip = menuStrip;
+
+        // Log initial left panel / month calendar layout for debugging missing Saturday column
+        LogLeftPanelLayout("constructor");
+
+        // Watch for layout/size changes and log so we can see when the designer MonthCalendar is clipped
+        try
+        {
+            designerMonthCalendar.SizeChanged += (_, _) => LogLeftPanelLayout("designerMonthCalendar.SizeChanged");
+            designerCalendarLeftPanel.SizeChanged += (_, _) => LogLeftPanelLayout("designerCalendarLeftPanel.SizeChanged");
+            if(designerCalendarLeftPanel.Parent is not null) designerCalendarLeftPanel.Parent.Layout += (_, _) => LogLeftPanelLayout("leftParent.Layout");
+        }
+        catch { }
     }
 
     private ToolStrip BuildIconLine()
@@ -65,7 +382,8 @@ public sealed partial class MainForm : Form
             Padding = new Padding(4, 2, 4, 2)
         };
 
-        toolStrip.Items.AddRange([
+        toolStrip.Items.AddRange(
+        [
             IconCommand("New", "New"),
             IconCommand("Open", "Open"),
             IconCommand("Save", "Save"),
@@ -105,6 +423,79 @@ public sealed partial class MainForm : Form
         button.Click += (_, _) => ExecuteCommand(commandText);
 
         return button;
+    }
+
+    private void ToggleBinderPanel()
+    {
+        if(designerCalendarLeftPanel is null) return;
+
+        if(!_binderPanelCollapsed)
+        {
+            // Start collapse: save width, hide children (except glyph), and animate to glyph-only width
+            _binderPanelLastWidth = designerCalendarLeftPanel.Width > 0 ? designerCalendarLeftPanel.Width : _binderPanelLastWidth;
+
+            try
+            {
+                // Record current visibility for later restore but don't hide them immediately; hiding will occur when animation completes to avoid layout side-effects.
+                _leftPanelChildVisibility = new Dictionary<Control, bool>();
+                foreach(Control c in designerCalendarLeftPanel.Controls)
+                {
+                    if(object.ReferenceEquals(c, _binderToggleLabel))
+                    {
+                        // ensure glyph remains visible
+                        _leftPanelChildVisibility[c] = true;
+                        continue;
+                    }
+
+                    _leftPanelChildVisibility[c] = c.Visible;
+                }
+
+                int glyphWidth = 24;
+                try { if(_binderToggleLabel is not null && _binderToggleLabel.PreferredSize.Width > 0) glyphWidth = Math.Max(24, _binderToggleLabel.PreferredSize.Width + 8); } catch { }
+
+                StartBinderAnimation(glyphWidth, expanding: false);
+            }
+            catch { }
+        }
+        else
+        {
+            // Start expand: animate back to saved width, will restore children at end
+            int restoreWidth = _binderPanelLastWidth > 0 ? _binderPanelLastWidth : 260;
+            StartBinderAnimation(restoreWidth, expanding: true);
+        }
+
+        // Force layout update so the tab control fills the available space
+        designerCalendarLeftPanel.Parent?.PerformLayout();
+        _tabs.Parent?.PerformLayout();
+        _tabs.Invalidate();
+
+        // Menu/glyph will be updated when the animation completes
+    }
+
+    private void LogLeftPanelLayout(string reason)
+    {
+        try
+        {
+            var left = designerCalendarLeftPanel;
+            var month = designerMonthCalendar;
+
+            if(left is null || month is null)
+            {
+                return;
+            }
+
+            Rectangle leftBounds = left.Bounds;
+            Rectangle leftClient = left.ClientRectangle;
+            Rectangle monthBounds = month.Bounds;
+            Rectangle monthClient = month.ClientRectangle;
+            bool leftVisible = left.Visible;
+
+            // left panel layout: left.Visible={leftVisible}, left.Bounds={leftBounds}, left.Client={leftClient}, month.Bounds={monthBounds}, month.Client={monthClient}
+        }
+        catch(Exception ex)
+        {
+            // Swallow layout logging exceptions
+        }
     }
 
     private static Bitmap CreateToolbarIcon(string label)
@@ -378,42 +769,154 @@ public sealed partial class MainForm : Form
     {
         MenuStrip? menu = new() { Dock = DockStyle.Top };
 
-        menu.Items.AddRange([
-            BuildMenu("&File", [
-                Command("&New\tCtrl+N"),
-                Command("&Open\tCtrl+O"),
-                Command("&Close\tCtrl+W"),
-                Separator(),
-                Command("Save &As...\tShift+Ctrl+S"),
-                Separator(),
-                Command("A&rchive...\tCtrl+A"),
-                Command("Co&mpact..."),
-                Command("Mer&ge...\tCtrl+M"),
-                Command("Con&vert..."),
-                Command("&Import...\tCtrl+I"),
-                Command("&Export..."),
-                Separator(),
-                Command("Mee&ting Notices..."),
-                Command("&Work Offline"),
-                Separator(),
-                Command("Send Mai&l..."),
-                Separator(),
-                Command("Publish &Busy Time Now"),
-                Command("Publis&h as Web Pages..."),
-                Separator(),
-                Command("&Print...\tCtrl+P"),
-                BuildMenu("&User Setup", [
-                    Command("&Organizer Preferences..."),
-                    Command("&Printer...\tShift+Ctrl+P"),
-                    Command("Mail and &Scheduling..."),
-                    Command("Smart&Icons..."),
-                    Command("Pass&words...\tCtrl+U"),
-                    Command("&Telephone Dialing...")
-                ]),
-                Separator(),
-                Command("E&xit Organizer")
-            ]),
-            BuildMenu("&Edit", [
+        // Build the Turn To submenu items from the current tabs so the menu reflects runtime sections.
+        ToolStripItem[] turnToItems;
+        try
+        {
+            var _turnToListAll = new List<ToolStripItem>();
+            if(_tabs is not null)
+            {
+                foreach(TabPage tp in _tabs.TabPages)
+                {
+                    try { _turnToListAll.Add(Command(tp.Text, "Turn To " + tp.Text)); } catch { }
+                }
+            }
+
+            const int maxVisible = 10;
+            var visibleList = _turnToListAll.Take(maxVisible).ToList();
+
+            // Only show the "More sections..." entry when there are more than maxVisible sections
+            if(_turnToListAll.Count > maxVisible)
+            {
+                visibleList.Add(Command("&More sections..."));
+            }
+
+            // Fallback to at least the More entry if nothing was discovered
+            if(visibleList.Count == 0) visibleList.Add(Command("&More sections..."));
+
+            turnToItems = visibleList.ToArray();
+        }
+        catch
+        {
+            turnToItems = new ToolStripItem[] { Command("&More sections...") };
+        }
+
+        // Build the Entry In submenu items dynamically from the current tabs.
+        ToolStripItem[] entryInItems;
+        try
+        {
+            var _entryInAll = new List<ToolStripItem>();
+            if(_tabs is not null)
+            {
+                foreach(TabPage tp in _tabs.TabPages)
+                {
+                    try { _entryInAll.Add(Command(tp.Text + "...", "Entry In " + tp.Text)); } catch { }
+                }
+            }
+
+            const int maxVisibleEntry = 10;
+            var visibleEntry = _entryInAll.Take(maxVisibleEntry).ToList();
+
+            if(_entryInAll.Count > maxVisibleEntry)
+            {
+                visibleEntry.Add(Command("&More sections..."));
+            }
+
+            if(visibleEntry.Count == 0) visibleEntry.Add(Command("&More sections..."));
+
+            entryInItems = visibleEntry.ToArray();
+        }
+        catch
+        {
+            entryInItems = new ToolStripItem[] { Command("&More sections...") };
+        }
+
+        // Create the collapse/expand menu item so we can update its text on toggle
+        _collapseBinderPanelMenuItem = Command("Collapse Bi&nder Panel\tF12");
+
+        // Build appointment menu separately so we can update its DropDownOpening before display
+        var appointmentMenu = BuildMenu("&Appointment", new ToolStripItem[] {
+            Command("&Categorize...\tF5"),
+            Command("A&larm...\tF6"),
+            Command("&Repeat...\tF7"),
+            Command("C&ost...\tF8"),
+            Separator(),
+            // Create explicit references so we can update checked/enabled state when an appointment is focused
+            (_warnOfConflictsMenuItem = CreateMenuItemFromText("&Warn Of Conflicts", "Warn Of Conflicts", false)),
+            (_pencilInMenuItem = CreateMenuItemFromText("&Pencil in", "Pencil in", false)),
+            (_confidentialMenuItem = CreateMenuItemFromText("Con&fidential\tF4", "Confidential", false))
+        });
+
+        // Build recent files menu items (bottom of File menu)
+        ToolStripItem[] recentFileItems;
+        try
+        {
+            var recent = new List<ToolStripItem>();
+            var recentPaths = _data?.Preferences?.RecentFiles ?? new List<string>();
+            foreach(var path in recentPaths.Take(10))
+            {
+                try
+                {
+                    var item = CreateMenuItemFromText(path, "OpenRecent:" + path);
+                    item.ToolTipText = path;
+                    recent.Add(item);
+                }
+                catch { }
+            }
+
+            if(recent.Count == 0)
+            {
+                recent.Add(Command("(No recent files)"));
+            }
+
+            recentFileItems = recent.ToArray();
+        }
+        catch
+        {
+            recentFileItems = new ToolStripItem[] { Command("(No recent files)") };
+        }
+
+        // Build File menu children and append recent items
+        var fileChildren = new List<ToolStripItem>() {
+            Command("&New\tCtrl+N"),
+            Command("&Open\tCtrl+O"),
+            Command("&Close\tCtrl+W"),
+            Separator(),
+            Command("Save &As...\tShift+Ctrl+S"),
+            Separator(),
+            Command("A&rchive...\tCtrl+A"),
+            Command("Co&mpact..."),
+            Command("Mer&ge...\tCtrl+M"),
+            Command("&Import...\tCtrl+I"),
+            Command("&Export..."),
+            Separator(),
+            Command("Mee&ting Notices..."),
+            Command("&Work Offline"),
+            Separator(),
+            Command("Send Mai&l..."),
+            Separator(),
+            Command("Publish &Busy Time Now"),
+            Command("Publis&h as Web Pages..."),
+            Separator(),
+            Command("&Print...\tCtrl+P"),
+            BuildMenu("&User Setup", new ToolStripItem[] {
+                Command("&Organizer Preferences..."),
+                Command("&Printer...\tShift+Ctrl+P"),
+                Command("Mail and &Scheduling..."),
+                Command("Smart&Icons..."),
+                Command("Pass&words...\tCtrl+U"),
+                Command("&Telephone Dialing...")
+            }),
+            Separator(),
+            Command("E&xit Organizer"),
+            Separator()
+        };
+
+        fileChildren.AddRange(recentFileItems);
+
+        menu.Items.AddRange(new ToolStripItem[] {
+            BuildMenu("&File", fileChildren.ToArray()),
+            BuildMenu("&Edit", new ToolStripItem[] {
                 Command("&Undo\tCtrl+Z"),
                 Separator(),
                 Command("Cu&t\tCtrl+X"),
@@ -433,8 +936,8 @@ public sealed partial class MainForm : Form
                 Command("Find Person via &Internet...\tCtrl+J"),
                 Separator(),
                 Command("OLE Li&nks...")
-            ]),
-            BuildMenu("&View", [
+            }),
+            BuildMenu("&View", new ToolStripItem[] {
                 Command("&1 Day Planner"),
                 Command("&2 Day per Page"),
                 Command("&3 Multiple Calendar"),
@@ -445,7 +948,7 @@ public sealed partial class MainForm : Form
                 Command("&8 Year"),
                 Separator(),
                 Command("&Show Clean Screen\tF11"),
-                Command("Collapse Bi&nder Panel\tF12"),
+                _collapseBinderPanelMenuItem,
                 Separator(),
                 Command("&Fold Out"),
                 Separator(),
@@ -453,21 +956,10 @@ public sealed partial class MainForm : Form
                 Command("C&lear Filter"),
                 Separator(),
                 Command("Calendar &Preferences...")
-            ]),
-            BuildMenu("&Create", [
+            }),
+            BuildMenu("&Create", new ToolStripItem[] {
                 Command("&Appointment...\tIns"),
-                BuildMenu("&Entry In", [
-                    Command("Calendar...", "Entry In Calendar"),
-                    Command("To Do...", "Entry In To Do"),
-                    Command("Contacts...", "Entry In Contacts"),
-                    Command("Notepad...", "Entry In Notepad"),
-                    Command("Anniversary...", "Entry In Anniversary"),
-                    Command("Holidays...", "Entry In Holidays"),
-                    Command("Recipies...", "Entry In Recipies"),
-                    Command("Races...", "Entry In Races"),
-                    Command("Blue Jays...", "Entry In Blue Jays"),
-                    Command("&More sections...")
-                ]),
+                BuildMenu("&Entry In", entryInItems),
                 Separator(),
                 Command("Organizer &Link\tCtrl+L"),
                 Command("Co&mment Link..."),
@@ -483,50 +975,89 @@ public sealed partial class MainForm : Form
                 Command("&Group of Contacts..."),
                 Command("Street Ma&p..."),
                 Command("Dri&ving Directions...")
-            ]),
-            BuildMenu("&Section", [
+            }),
+            BuildMenu("&Section", new ToolStripItem[] {
                 Command("&Customize..."),
                 Command("&Show Through..."),
                 Command("&Include..."),
                 Separator(),
-                BuildMenu("&Turn To", [
-                    Command("Calendar", "Turn To Calendar"),
-                    Command("To Do", "Turn To To Do"),
-                    Command("Contacts", "Turn To Contacts"),
-                    Command("Notepad", "Turn To Notepad"),
-                    Command("Anniversary", "Turn To Anniversary"),
-                    Command("Holidays", "Turn To Holidays"),
-                    Command("Recipies", "Turn To Recipies"),
-                    Command("Races", "Turn To Races"),
-                    Command("Blue Jays", "Turn To Blue Jays"),
-                    Command("&More sections...")
-                ])
-            ]),
-            BuildMenu("&Appointment", [
-                Command("&Categorize...\tF5"),
-                Command("A&larm...\tF6"),
-                Command("&Repeat...\tF7"),
-                Command("C&ost...\tF8"),
-                Separator(),
-                Command("&Warn Of Conflicts"),
-                Command("&Pencil in"),
-                Command("Con&fidential\tF4")
-            ]),
-            BuildMenu("&Phone", [
+                BuildMenu("&Turn To", turnToItems)
+            }),
+            appointmentMenu,
+            BuildMenu("&Phone", new ToolStripItem[] {
                 Command("&Dial...\tCtrl+D"),
                 Command("&Quick Dial...\tCtrl+Q"),
                 Separator(),
                 Command("&Incoming Call..."),
                 Separator(),
                 Command("&Change Area Codes...")
-            ]),
-            BuildMenu("&Help", [
+            }),
+            BuildMenu("&Help", new ToolStripItem[] {
                 Command("&Help Topics"),
                 Command("&Bubble Help\tCtrl+F1"),
                 Separator(),
                 Command("&About Organizer")
-            ])
-        ]);
+            })
+        });
+
+        // Wire up click handlers for appointment menu items so they toggle the focused appointment
+        // and persist the change immediately.
+        if(_warnOfConflictsMenuItem is not null)
+        {
+            _warnOfConflictsMenuItem.Click += (_, _) =>
+            {
+                if(_selectedCalendarEvent is CalendarEvent ev)
+                {
+                    ev.WarnOfConflicts = !ev.WarnOfConflicts;
+
+                    try
+                    {
+                        _store.Save(_data);
+                    }
+                    catch { }
+
+                    UpdateAppointmentMenuItems();
+                    _refreshCalendar();
+                }
+                };
+        }
+
+        _pencilInMenuItem?.Click += (_, _) =>
+            {
+                if(_selectedCalendarEvent is CalendarEvent ev)
+                {
+                    ev.PencilIn = !ev.PencilIn;
+
+                    try
+                    {
+                        _store.Save(_data);
+                    }
+                    catch { }
+
+                    UpdateAppointmentMenuItems();
+                    _refreshCalendar();
+                }
+            };
+
+        _confidentialMenuItem?.Click += (_, _) =>
+            {
+                if(_selectedCalendarEvent is CalendarEvent ev)
+                {
+                    ev.Confidential = !ev.Confidential;
+
+                    try
+                    {
+                        _store.Save(_data);
+                    }
+                    catch { }
+
+                    UpdateAppointmentMenuItems();
+                    _refreshCalendar();
+                }
+            };
+
+        // Update menu state when the appointment menu is opened so checks reflect current selection
+        appointmentMenu?.DropDownOpening += (_, _) => UpdateAppointmentMenuItems();
 
         return menu;
     }
@@ -542,18 +1073,54 @@ public sealed partial class MainForm : Form
 
     private ToolStripMenuItem Command(string text)
     {
-        ToolStripMenuItem? menuItem = new(text);
-
-        menuItem.Click += (_, _) => ExecuteCommand(text);
-
-        return menuItem;
+        return CreateMenuItemFromText(text, text);
     }
 
     private ToolStripMenuItem Command(string text, string commandKey)
     {
-        ToolStripMenuItem? menuItem = new(text);
+        return CreateMenuItemFromText(text, commandKey);
+    }
 
-        menuItem.Click += (_, _) => ExecuteCommand(commandKey);
+    // Helper that parses menu text for an optional '\t' separated shortcut (e.g. "&New\tCtrl+N").
+    // If a shortcut is present it is assigned to ShortcutKeys so the renderer places it at the
+    // right-hand side of the menu item rather than being part of the item text.
+    private ToolStripMenuItem CreateMenuItemFromText(string text, string commandKey, bool attachExecuteCommand = true)
+    {
+        string displayText = text;
+        string? shortcutText = null;
+
+        int tabIndex = text.IndexOf('\t');
+        if(tabIndex >= 0)
+        {
+            displayText = text.Substring(0, tabIndex);
+            shortcutText = text.Substring(tabIndex + 1);
+        }
+
+        ToolStripMenuItem menuItem = new(displayText);
+        if(attachExecuteCommand)
+        {
+            menuItem.Click += (_, _) => ExecuteCommand(commandKey);
+        }
+
+        if(!string.IsNullOrEmpty(shortcutText))
+        {
+            try
+            {
+                // Normalize common alias tokens used in the menu specifications (e.g. Ins -> Insert)
+                string normalized = shortcutText!.Trim();
+                normalized = normalized.Replace("Ins", "Insert", StringComparison.OrdinalIgnoreCase);
+                normalized = normalized.Replace("Del", "Delete", StringComparison.OrdinalIgnoreCase);
+                normalized = normalized.Replace("Ctrl+", "Control+", StringComparison.OrdinalIgnoreCase);
+
+                var keys = (Keys)TypeDescriptor.GetConverter(typeof(Keys)).ConvertFromString(normalized)!;
+                menuItem.ShortcutKeys = keys;
+                menuItem.ShowShortcutKeys = true;
+            }
+            catch
+            {
+                // Ignore parse errors and leave the text as-is
+            }
+        }
 
         return menuItem;
     }
@@ -581,6 +1148,14 @@ public sealed partial class MainForm : Form
         if(command.Equals("About Organizer", StringComparison.OrdinalIgnoreCase))
         {
             aboutToolStripMenuItem_Click(this, EventArgs.Empty);
+
+            return;
+        }
+
+        if(command.Equals("Mail and Scheduling", StringComparison.OrdinalIgnoreCase))
+        {
+            ShowMailAndScheduling();
+
             return;
         }
 
@@ -623,29 +1198,35 @@ public sealed partial class MainForm : Form
                 Close();
                 return true;
 
-            case "Calendar":
-            case "Turn To Calendar":
-                SelectSection("Calendar");
+            // Generic handler for "Turn To <Section>" commands generated from the Turn To submenu.
+            case string s when s.StartsWith("Turn To ", StringComparison.OrdinalIgnoreCase):
+                try
+                {
+                    var sectionName = s.Substring("Turn To ".Length);
+                    SelectSection(sectionName);
+                }
+                catch { }
+
                 return true;
 
-            case "Contacts":
-            case "Turn To Contacts":
-                SelectSection("Contacts");
-                return true;
+            // Generic handler for recent/opened files
+            case string s when s.StartsWith("OpenRecent:", StringComparison.OrdinalIgnoreCase):
+                try
+                {
+                    var path = s.Substring("OpenRecent:".Length);
+                    if(File.Exists(path))
+                    {
+                        LoadData(_store.LoadFrom(path));
+                        _currentFilePath = path;
+                        AddToRecentFiles(path);
+                    }
+                    else
+                    {
+                        MessageBox.Show(this, $"File not found: {path}", "Open Recent", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
+                }
+                catch { }
 
-            case "Anniversary":
-            case "Turn To Anniversary":
-                SelectSection("Anniversary");
-                return true;
-
-            case "To Do":
-            case "Turn To To Do":
-                SelectSection("To Do");
-                return true;
-
-            case "Notepad":
-            case "Turn To Notepad":
-                SelectSection("Notepad");
                 return true;
 
             case "1 Day Planner":
@@ -728,6 +1309,10 @@ public sealed partial class MainForm : Form
                 _moveCalendar(-1);
                 return true;
 
+            case "Collapse Binder Panel":
+                ToggleBinderPanel();
+                return true;
+
             case "Add":
                 AddCurrentSectionItem();
                 return true;
@@ -742,7 +1327,46 @@ public sealed partial class MainForm : Form
 
     private void ShowOrganizerPreferences()
     {
-        if(OrganizerPreferencesDialog.Edit(this, _data.Preferences)) _store.Save(_data);
+        if(OrganizerPreferencesDialog.Edit(this, _data.Preferences))
+        {
+            _store.Save(_data);
+
+            // Apply changed preferences to the calendar and force an immediate redraw
+            try
+            {
+                var planner = _tabs.TabPages
+                    .Cast<TabPage>()
+                    .SelectMany(p => p.Controls.OfType<CalendarPlannerView>())
+                    .FirstOrDefault();
+
+                var weekStarts = ParseWeekStarts(_data);
+
+                if(planner is not null)
+                {
+                    planner.WeekStarts = weekStarts;
+                }
+
+                // Also update the left-panel MonthCalendar (the runtime one added by BuildCalendarTab) so it reflects the new preference
+                try
+                {
+                    var leftMonth = designerCalendarLeftPanel?.Controls.OfType<MonthCalendar>().FirstOrDefault();
+                    if(leftMonth is not null)
+                    {
+                        leftMonth.FirstDayOfWeek = ConvertToWinFormsDay(weekStarts);
+                        leftMonth.Invalidate();
+                    }
+                    else
+                    {
+                        // Fallback: update designer-created control if present
+                        try { designerMonthCalendar.FirstDayOfWeek = ConvertToWinFormsDay(weekStarts); designerMonthCalendar.Invalidate(); } catch { }
+                    }
+                }
+                catch { }
+            }
+            catch { }
+
+            _refreshCalendar();
+        }
     }
 
     private void AddCurrentSectionItem()
@@ -777,7 +1401,52 @@ public sealed partial class MainForm : Form
 
     private void ShowPrinterSetup()
     {
-        if(PrinterSetupDialog.Edit(this, _data.Preferences)) _store.Save(_data);
+        // Show the standard PrintDialog to select a printer, then the PageSetupDialog for page margins/orientation.
+        try
+        {
+            using PrintDialog pd = new() { UseEXDialog = true };
+            // Preselect the saved printer if available
+            try { if(!string.IsNullOrWhiteSpace(_data.Preferences.PrinterName)) pd.PrinterSettings.PrinterName = _data.Preferences.PrinterName; } catch { }
+
+            if(pd.ShowDialog(this) == DialogResult.OK)
+            {
+                try { _data.Preferences.PrinterName = pd.PrinterSettings.PrinterName ?? string.Empty; } catch { }
+                _store.Save(_data);
+            }
+
+            // Allow page setup (margins, orientation)
+            ShowPageSetupDialog();
+        }
+        catch
+        {
+            // Fallback to custom dialog if the standard dialogs are unavailable
+            try { if(PrinterSetupDialog.Edit(this, _data.Preferences)) _store.Save(_data); } catch { }
+        }
+    }
+
+    private void ShowMailAndScheduling()
+    {
+        try
+        {
+            MailSchedulingDialog.Edit(this);
+
+            // Sync any changed preferences back into the main form's data and persist
+            try
+            {
+                var prefs = ProgramData.Instance.Data.Preferences;
+                if(prefs is not null && _data?.Preferences is not null)
+                {
+                    _data.Preferences.MailProgram = prefs.MailProgram;
+                    _data.Preferences.MailProtocol = prefs.MailProtocol;
+                    _store.Save(_data);
+                }
+            }
+            catch { }
+        }
+        catch
+        {
+            ShowNotImplemented("Mail and Scheduling...");
+        }
     }
 
     private void SaveData()
@@ -817,6 +1486,7 @@ public sealed partial class MainForm : Form
 
         LoadData(_store.LoadFrom(dialog.FileName));
         _currentFilePath = dialog.FileName;
+        try { AddToRecentFiles(dialog.FileName); } catch { }
     }
 
     private void SaveOrganizerAs()
@@ -833,6 +1503,7 @@ public sealed partial class MainForm : Form
         {
             _store.SaveTo(_data, dialog.FileName);
             _currentFilePath = dialog.FileName;
+            try { AddToRecentFiles(dialog.FileName); } catch { }
         }
     }
 
@@ -866,6 +1537,31 @@ public sealed partial class MainForm : Form
         target.Clear();
 
         if(source is not null) target.AddRange(source);
+    }
+
+    private void AddToRecentFiles(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return;
+
+        try
+        {
+            var prefs = _data.Preferences ??= new OrganizerPreferences();
+
+            // Remove any existing case-insensitive duplicate
+            prefs.RecentFiles.RemoveAll(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
+
+            // Insert at head
+            prefs.RecentFiles.Insert(0, path);
+
+            // Trim to 10 entries
+            if (prefs.RecentFiles.Count > 10)
+            {
+                prefs.RecentFiles.RemoveRange(10, prefs.RecentFiles.Count - 10);
+            }
+
+            try { _store.Save(_data); } catch { }
+        }
+        catch { }
     }
 
     private void RefreshSectionSource<T>(string sectionName, List<T> items) where T : class
@@ -1046,8 +1742,12 @@ public sealed partial class MainForm : Form
     private void ShowAlarms()
     {
         DateTime today = DateTime.Today;
-        IEnumerable<string>? upcomingEvents = _data.Events.Where(item => item.Start >= DateTime.Now && item.Start < today.AddDays(7)).OrderBy(item => item.Start).Select(item => $"Appointment: {item.Start:g} {item.Title}");
-        IEnumerable<string>? dueTasks = _data.Tasks.Where(item => !item.Completed && item.DueDate.Date <= today.AddDays(7)).OrderBy(item => item.DueDate).Select(item => $"To Do: {item.DueDate:g} {item.Title}");
+        IEnumerable<string>? upcomingEvents = _data.Events.Where(item => item.Start >= DateTime.Now && item.Start < today.AddDays(7))
+            .OrderBy(item => item.Start)
+            .Select(item => $"Appointment: {item.Start:g} {item.Title}");
+        IEnumerable<string>? dueTasks = _data.Tasks.Where(item => !item.Completed && item.DueDate.Date <= today.AddDays(7))
+            .OrderBy(item => item.DueDate)
+            .Select(item => $"To Do: {item.DueDate:g} {item.Title}");
         IEnumerable<string>? lines = upcomingEvents.Concat(dueTasks).DefaultIfEmpty("No upcoming alarms.");
 
         MessageBox.Show(this, string.Join(Environment.NewLine, lines), "Alarms", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -1065,7 +1765,7 @@ public sealed partial class MainForm : Form
 
     private static string CleanMenuText(string commandText) => commandText.Split('\t')[0].Replace("&", string.Empty, StringComparison.Ordinal).Replace("...", string.Empty, StringComparison.Ordinal);
 
-    private Control BuildTrashDropTarget()
+    private Panel BuildTrashDropTarget()
     {
         Panel? panel = new()
         {
@@ -1107,19 +1807,116 @@ public sealed partial class MainForm : Form
         trash.DragEnter += DragEnterHandler;
         trash.DragDrop += DragDropHandler;
 
+        // Keep reference to the trash panel for animation
+        _trashDropControl = panel;
+
         panel.Controls.Add(trash);
 
         return panel;
     }
 
+    private Panel BuildClipboardDropTarget()
+    {
+        Panel? panel = new()
+        {
+            Dock = DockStyle.Bottom,
+            Height = 58,
+            BackColor = Color.FromArgb(178, 134, 61),
+            Padding = new Padding(10, 6, 0, 6),
+            AllowDrop = true
+        };
+
+        Label? clip = new()
+        {
+            AutoSize = false,
+            Width = 58,
+            Dock = DockStyle.Left,
+            Text = "📋",
+            TextAlign = ContentAlignment.MiddleCenter,
+            Font = new Font(Font.FontFamily, 18f, FontStyle.Bold),
+            BackColor = Color.FromArgb(238, 216, 159),
+            ForeColor = Color.FromArgb(72, 48, 24),
+            BorderStyle = BorderStyle.FixedSingle,
+            AllowDrop = true
+        };
+
+        void DragEnterHandler(object? sender, DragEventArgs e)
+        {
+            // Accept incoming drag payloads compatible with the app's drag payload
+            e.Effect = e.Data?.GetDataPresent(typeof(TrashDropPayload)) == true ? DragDropEffects.Copy : DragDropEffects.None;
+        }
+
+        void DragDropHandler(object? sender, DragEventArgs e)
+        {
+            if(e.Data?.GetData(typeof(TrashDropPayload)) is not TrashDropPayload payload) return;
+
+            // Store the payload into the app clipboard (replace any existing)
+            _clipboardPayload = payload;
+        }
+
+        // Start a drag from the clipboard icon if we have something stored
+        clip.MouseDown += (_, e) =>
+        {
+            if(_clipboardPayload is null) return;
+
+            // Re-expose the stored payload as a drag source wrapped in a DataObject
+            try
+            {
+                DataObject data = new();
+                data.SetData(typeof(TrashDropPayload), _clipboardPayload!);
+                DoDragDrop(data, DragDropEffects.Move);
+            }
+            catch { }
+        };
+
+        panel.DragEnter += DragEnterHandler;
+        panel.DragDrop += DragDropHandler;
+        clip.DragEnter += DragEnterHandler;
+        clip.DragDrop += DragDropHandler;
+
+        panel.Controls.Add(clip);
+
+        return panel;
+    }
+
+    public sealed class TrashDropPayload
+    {
+        public object Item { get; }
+        private readonly Action? _deleteAction;
+
+        public TrashDropPayload(object item, Action? deleteAction)
+        {
+            Item = item;
+            _deleteAction = deleteAction;
+        }
+
+        public void Delete() => _deleteAction?.Invoke();
+    }
+
     private TabPage BuildCalendarTab()
     {
         TabPage? page = new("Calendar");
-        MonthCalendar? monthCalendar = new() { Dock = DockStyle.Top, MaxSelectionCount = 1, ShowTodayCircle = true };
-        CalendarPlannerView? planner = new() { Dock = DockStyle.Fill };
+        MonthCalendar? monthCalendar = new() { MaxSelectionCount = 1, ShowTodayCircle = true };
+        try
+        {
+            // Ensure the left-panel MonthCalendar initialises with the user's preference on first load
+            monthCalendar.FirstDayOfWeek = ConvertToWinFormsDay(ParseWeekStarts(_data));
+        }
+        catch { }
+        // store planner in a field so other methods can reliably refresh it
+        var planner = new CalendarPlannerView() { Dock = DockStyle.Fill };
+        _planner = planner;
+
+        // Helper: use class-level ParseWeekStarts
+        // Apply preference initially
+        try { planner.WeekStarts = ParseWeekStarts(_data); } catch { planner.WeekStarts = DayOfWeek.Sunday; }
 
         CalendarEvent? selectedEvent = null;
         OrganizerTask? selectedTask = null;
+
+        // Use the instance-level UpdateAppointmentMenuItems so menu state is driven
+        // from the single authoritative _selectedCalendarEvent field. Planner-level
+        // code should keep the instance selection in sync.
 
         Button? dayViewButton = new() { Text = "Day", Width = 90 };
         Button? weekViewButton = new() { Text = "Week", Width = 90 };
@@ -1131,18 +1928,43 @@ public sealed partial class MainForm : Form
         Button? deleteButton = new() { Text = "Delete", Width = 90 };
         Button? todayButton = new() { Text = "Today", Width = 90 };
         CalendarViewMode viewMode = CalendarViewMode.Day;
+        try
+        {
+            var lastView = _data.Preferences?.LastCalendarView;
+            if(!string.IsNullOrWhiteSpace(lastView) && Enum.TryParse<CalendarViewMode>(lastView, true, out var parsed))
+            {
+                viewMode = parsed;
+            }
+        }
+        catch { }
         DateTime plannerDate = monthCalendar.SelectionStart.Date;
 
-        void RefreshCalendar()
+        // Core refresh implementation. When preserveSelection is true we avoid
+        // clearing the currently-selected appointment so callers can update flags
+        // while keeping menu state in-sync.
+        void RefreshCalendarCore(bool preserveSelection)
         {
-            selectedEvent = null;
-            selectedTask = null;
+            if(!preserveSelection)
+            {
+                selectedEvent = null;
+                selectedTask = null;
+                _selectedCalendarEvent = null;
+            }
+
+            // Ensure planner respects the user's Week Starts preference each refresh
+            try { planner.WeekStarts = ParseWeekStarts(_data); } catch { planner.WeekStarts = DayOfWeek.Sunday; }
             planner.SelectedDate = plannerDate;
             planner.ViewMode = viewMode;
-            planner.Events = [.. GetCalendarEvents(plannerDate, viewMode)];
-            planner.Tasks = [.. GetCalendarTasks(plannerDate, viewMode)];
-            planner.Invalidate();
+            // Keep the left-panel month calendar in sync with the planner's current date
+            try { monthCalendar.SetDate(plannerDate); } catch { try { monthCalendar.SelectionStart = plannerDate; } catch { } }
+            // Populate events/tasks for the planner (convert to arrays for IReadOnlyList)
+            planner.Events = GetCalendarEvents(plannerDate, viewMode).ToArray();
+            planner.Tasks = GetCalendarTasks(plannerDate, viewMode).ToArray();
+            // Force immediate repaint so changes appear right away
+            planner.Refresh();
         }
+
+        void RefreshCalendar() => RefreshCalendarCore(false);
 
         _refreshCalendar = RefreshCalendar;
 
@@ -1161,6 +1983,8 @@ public sealed partial class MainForm : Form
         _setCalendarView = mode =>
         {
             viewMode = mode;
+            // persist the selected view
+            try { _data.Preferences.LastCalendarView = mode.ToString(); _store.Save(_data); } catch { }
             RefreshCalendar();
         };
 
@@ -1177,8 +2001,15 @@ public sealed partial class MainForm : Form
             {
                 if(CreateAppointmentDialog.Edit(this, calendarEvent, "Edit Appointment", _data.Events))
                 {
-                    _store.Save(_data);
-                    RefreshCalendar();
+                    try { _store.Save(_data); } catch { }
+
+                    // Refresh underlying data and planner, then restore the selection so the
+                    // appointment menu items reflect the edited appointment immediately.
+                    RefreshCalendarCore(true);
+                    selectedEvent = calendarEvent;
+                    _selectedCalendarEvent = calendarEvent;
+                    UpdateAppointmentMenuItems();
+                    MainMenuStrip?.Refresh();
                 }
 
                 return;
@@ -1212,12 +2043,20 @@ public sealed partial class MainForm : Form
         {
             selectedEvent = calendarEvent;
             selectedTask = null;
+            // Keep the instance-level focused appointment in sync with planner selection.
+            _selectedCalendarEvent = calendarEvent;
+            UpdateAppointmentMenuItems();
+            MainMenuStrip?.Refresh();
         };
 
         planner.EventDoubleClicked += (_, calendarEvent) =>
         {
             selectedEvent = calendarEvent;
             selectedTask = null;
+            // Keep the instance-level focused appointment in sync before opening edit flow.
+            _selectedCalendarEvent = calendarEvent;
+            UpdateAppointmentMenuItems();
+            MainMenuStrip?.Refresh();
             EditSelectedCalendarEvent();
         };
 
@@ -1225,12 +2064,18 @@ public sealed partial class MainForm : Form
         {
             selectedEvent = null;
             selectedTask = task;
+            _selectedCalendarEvent = null;
+            UpdateAppointmentMenuItems();
+            MainMenuStrip?.Refresh();
         };
 
         planner.TaskDoubleClicked += (_, task) =>
         {
             selectedEvent = null;
             selectedTask = task;
+            _selectedCalendarEvent = null;
+            UpdateAppointmentMenuItems();
+            MainMenuStrip?.Refresh();
             EditSelectedCalendarEvent();
         };
 
@@ -1238,7 +2083,8 @@ public sealed partial class MainForm : Form
 
         addButton.Click += (_, _) =>
         {
-            DateTime date = monthCalendar.SelectionStart.Date;
+            // Prefer the planner's selected date (right-side calendar) when available, otherwise fall back to the left MonthCalendar selection
+            DateTime date = planner is not null ? planner.SelectedDate.Date : monthCalendar.SelectionStart.Date;
             CalendarEvent? calendarEvent = new() { Start = date.AddHours(9), End = date.AddHours(10) };
 
             if(CreateAppointmentDialog.Edit(this, calendarEvent, "Create Appointment", _data.Events))
@@ -1261,22 +2107,89 @@ public sealed partial class MainForm : Form
             RefreshCalendar();
         };
 
-        FlowLayoutPanel? buttonPanel = new() { Dock = DockStyle.Top, Height = 48, Padding = new Padding(8), FlowDirection = FlowDirection.LeftToRight, BackColor = Color.FromArgb(199, 156, 75) };
+        FlowLayoutPanel? buttonPanel = new()
+        {
+            Dock = DockStyle.Top,
+            Height = 48,
+            Padding = new Padding(8),
+            FlowDirection = FlowDirection.LeftToRight,
+            BackColor = Color.FromArgb(199, 156, 75)
+        };
 
         buttonPanel.Controls.AddRange([previousButton, nextButton]);
 
         Control? trashDropTarget = BuildTrashDropTarget();
-        Panel? leftPanel = new() { Dock = DockStyle.Left, Width = 260, Padding = new Padding(8), BackColor = Color.FromArgb(219, 196, 137) };
 
-        leftPanel.Controls.Add(buttonPanel);
-        leftPanel.Controls.Add(monthCalendar);
+        // Populate the shared left-side calendar panel so it is visible on all tabs
+        designerCalendarLeftPanel.Controls.Clear();
+        // Size the left panel to match the calendar's preferred width plus padding
+        Size preferred = monthCalendar.GetPreferredSize(Size.Empty);
+        designerCalendarLeftPanel.Width = preferred.Width + 20; // 20px wider as requested
+        monthCalendar.Dock = DockStyle.Top;
+        designerCalendarLeftPanel.Controls.Add(buttonPanel);
+
+        // Ensure the binder toggle glyph is part of the left panel and placed above the month calendar
+        try
+        {
+            if(_binderToggleLabel is null)
+            {
+                _binderToggleLabel = new Label
+                {
+                    Text = _binderPanelCollapsed ? "\u25B6" : "\u25BC",
+                    Dock = DockStyle.Top,
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    Height = 24,
+                    Cursor = Cursors.Hand,
+                    BackColor = Color.Transparent,
+                    Padding = Padding.Empty,
+                    Margin = Padding.Empty,
+                    Font = new Font(SystemFonts.DefaultFont.FontFamily, SystemFonts.DefaultFont.SizeInPoints + 1.5f, FontStyle.Bold),
+                };
+
+                _binderToggleLabel.Click += (_, _) => ExecuteCommand("Collapse Binder Panel");
+            }
+
+            // Remove from any previous parent before re-adding
+            try
+            {
+                _binderToggleLabel.Parent?.Controls.Remove(_binderToggleLabel);
+            }
+            catch { }
+
+            // Add the glyph before the month calendar so it appears above it
+            designerCalendarLeftPanel.Controls.Add(_binderToggleLabel);
+            // We'll set child index after adding monthCalendar below if needed
+        }
+        catch { }
+
+        designerCalendarLeftPanel.Controls.Add(monthCalendar);
+
+        // Add clipboard and trash icons into an icons panel at the bottom of the left panel
+        Control? clipboardTarget = BuildClipboardDropTarget();
+        Control? trashTarget = BuildTrashDropTarget();
+
+        FlowLayoutPanel? iconsPanel = new() { Dock = DockStyle.Bottom, Height = 120, FlowDirection = FlowDirection.TopDown, Padding = new Padding(8) };
+        if(clipboardTarget is not null) iconsPanel.Controls.Add(clipboardTarget);
+        if(trashTarget is not null) iconsPanel.Controls.Add(trashTarget);
+
+        designerCalendarLeftPanel.Controls.Add(iconsPanel);
+
+        // Attach tooltips to the runtime navigation buttons and the glyph
+        try
+        {
+            if(_toolTip is null) _toolTip = new ToolTip { AutoPopDelay = 5000, InitialDelay = 300, ReshowDelay = 100, ShowAlways = true };
+            try { if(previousButton is not null) _toolTip.SetToolTip(previousButton, "Previous"); } catch { }
+            try { if(nextButton is not null) _toolTip.SetToolTip(nextButton, "Next"); } catch { }
+            try { if(_binderToggleLabel is not null) _toolTip.SetToolTip(_binderToggleLabel, "Collapse/Expand binder panel"); } catch { }
+        }
+        catch { }
 
         Panel rightPanel = new() { Dock = DockStyle.Fill, Padding = new Padding(8), BackColor = Color.FromArgb(178, 134, 61) };
 
         rightPanel.Controls.Add(planner);
 
+        // Only add the right panel to the tab page — the left panel is part of the main form
         page.Controls.Add(rightPanel);
-        page.Controls.Add(leftPanel);
         RefreshCalendar();
 
         return page;
@@ -1297,10 +2210,19 @@ public sealed partial class MainForm : Form
     {
         return viewMode switch
         {
-            CalendarViewMode.Day => _data.Tasks.Where(task => TaskOccursInRange(task, selectedDate.Date, selectedDate.Date.AddDays(1))).OrderBy(TaskPriority).ThenBy(task => task.Completed).ThenBy(task => task.Title),
-            CalendarViewMode.Week => _data.Tasks.Where(task => TaskOccursInRange(task, StartOfWeek(selectedDate), StartOfWeek(selectedDate).AddDays(7))).OrderBy(TaskPriority).ThenBy(task => task.Completed).ThenBy(task => task.Title),
-            CalendarViewMode.Month => _data.Tasks.Where(task => TaskOccursInRange(task, new DateTime(selectedDate.Year, selectedDate.Month, 1), new DateTime(selectedDate.Year, selectedDate.Month, 1).AddMonths(1))).OrderBy(TaskPriority).ThenBy(task => task.Completed).ThenBy(task => task.Title),
-            _ => _data.Tasks.OrderBy(TaskPriority).ThenBy(task => task.Completed).ThenBy(task => task.Title)
+            CalendarViewMode.Day => _data.Tasks.Where(task => TaskOccursInRange(task, selectedDate.Date, selectedDate.Date.AddDays(1)))
+            .OrderBy(TaskPriority)
+            .ThenBy(task => task.Completed).ThenBy(task => task.Title),
+            CalendarViewMode.Week => _data.Tasks.Where(task => TaskOccursInRange(task, StartOfWeek(selectedDate), StartOfWeek(selectedDate)
+            .AddDays(7))).OrderBy(TaskPriority)
+            .ThenBy(task => task.Completed)
+            .ThenBy(task => task.Title),
+            CalendarViewMode.Month => _data.Tasks.Where(task => TaskOccursInRange(task, new DateTime(selectedDate.Year, selectedDate.Month, 1), new DateTime(selectedDate.Year, selectedDate.Month, 1)
+            .AddMonths(1)))
+            .OrderBy(TaskPriority).ThenBy(task => task.Completed).ThenBy(task => task.Title),
+            _ => _data.Tasks.OrderBy(TaskPriority)
+            .ThenBy(task => task.Completed)
+            .ThenBy(task => task.Title)
         };
     }
 
@@ -1414,7 +2336,17 @@ public sealed partial class MainForm : Form
 
         grid.MouseDown += (_, e) =>
         {
-            if(title is not ("Contacts" or "Tasks") || e.Button != MouseButtons.Left)
+            // Only start dragging with the left button
+            if(e.Button != MouseButtons.Left)
+            {
+                dragStart = null;
+                dragItem = null;
+
+                return;
+            }
+
+            // Only certain tabs expose item-level dragging for deletion
+            if(!new[] { "Contacts", "Tasks", "Anniversary", "To Do", "Notes", "Notepad" }.Contains(title))
             {
                 dragStart = null;
                 dragItem = null;
@@ -1453,7 +2385,7 @@ public sealed partial class MainForm : Form
             if(dragRectangle.Contains(e.Location)) return;
 
             var itemToDelete = dragItem;
-            var payload = new TrashDropPayload(() =>
+            var payload = new TrashDropPayload(itemToDelete, () =>
             {
                 ((SortableBindingList<T>)source.DataSource).Remove(itemToDelete);
                 _store.Save(_data);
@@ -1465,7 +2397,10 @@ public sealed partial class MainForm : Form
 
             dragStart = null;
             dragItem = null;
-            grid.DoDragDrop(payload, DragDropEffects.Move);
+            // Wrap payload in DataObject so drop targets can reliably detect it
+            DataObject gridData = new();
+            gridData.SetData(typeof(TrashDropPayload), payload);
+            grid.DoDragDrop(gridData, DragDropEffects.Move);
         };
 
         grid.MouseUp += (_, _) =>
@@ -1559,24 +2494,29 @@ public sealed partial class MainForm : Form
             tree.BeginUpdate();
             tree.Nodes.Clear();
 
-            var headings = _data.Notes
+            List<Note>? headings = _data.Notes
                 .Where(note => note.IsChapterHeading)
                 .OrderBy(note => note.SortOrder)
                 .ThenBy(note => note.Title)
                 .ToList();
 
-            foreach(var heading in headings)
+            foreach(Note heading in headings)
             {
-                var headingNode = CreateNoteNode(heading);
+                TreeNode? headingNode = CreateNoteNode(heading);
+
                 tree.Nodes.Add(headingNode);
 
-                foreach(var child in _data.Notes.Where(note => !note.IsChapterHeading && note.ParentHeadingId == heading.Id).OrderBy(note => note.SortOrder).ThenBy(note => note.Title))
+                foreach(Note child in _data.Notes.Where(note => !note.IsChapterHeading && note.ParentHeadingId == heading.Id)
+                    .OrderBy(note => note.SortOrder)
+                    .ThenBy(note => note.Title))
                 {
                     headingNode.Nodes.Add(CreateNoteNode(child));
                 }
             }
 
-            foreach(var note in _data.Notes.Where(note => !note.IsChapterHeading && note.ParentHeadingId is null).OrderBy(note => note.SortOrder).ThenBy(note => note.Title))
+            foreach(Note note in _data.Notes.Where(note => !note.IsChapterHeading && note.ParentHeadingId is null)
+                .OrderBy(note => note.SortOrder)
+                .ThenBy(note => note.Title))
             {
                 tree.Nodes.Add(CreateNoteNode(note));
             }
@@ -1653,7 +2593,31 @@ public sealed partial class MainForm : Form
 
         tree.ItemDrag += (_, e) =>
         {
-            if(e.Item is TreeNode node) tree.DoDragDrop(node, DragDropEffects.Move);
+            if(e.Item is not TreeNode node || node.Tag is not Note note) return;
+
+            // Build a payload that will remove the note (or adjust children if a chapter)
+            var payload = new TrashDropPayload(note, () =>
+            {
+                var list = (SortableBindingList<Note>)source.DataSource;
+
+                if(note.IsChapterHeading)
+                {
+                    foreach(var child in _data.Notes.Where(child => child.ParentHeadingId == note.Id))
+                    {
+                        child.ParentHeadingId = null;
+                    }
+                }
+
+                list.Remove(note);
+                source.ResetBindings(false);
+                _store.Save(_data);
+                RebuildNotebookTree();
+            });
+
+            // Wrap payload in DataObject so drop targets can reliably detect it
+            DataObject treeData = new();
+            treeData.SetData(typeof(TrashDropPayload), payload);
+            tree.DoDragDrop(treeData, DragDropEffects.Move);
         };
 
         tree.DragEnter += (_, e) => e.Effect = e.Data?.GetDataPresent(typeof(TreeNode)) == true ? DragDropEffects.Move : DragDropEffects.None;
@@ -1872,1294 +2836,143 @@ public sealed partial class MainForm : Form
         if(idProperty?.GetValue(item) is Guid id && id == Guid.Empty) idProperty.SetValue(item, Guid.NewGuid());
     }
 
+    // Tab drag/reorder handlers — retained but disabled to prevent tab header drag/delete
+    // Tab-level dragging was intentionally disabled: only section line items support drag-to-trash.
+    private void Tabs_MouseDown(object? sender, MouseEventArgs e)
+    { }
+    private void Tabs_MouseMove(object? sender, MouseEventArgs e)
+    { }
+    private void Tabs_MouseUp(object? sender, MouseEventArgs e)
+    { }
+    private void Tabs_DragOver(object? sender, DragEventArgs e)
+    { }
+    private void Tabs_DragDrop(object? sender, DragEventArgs e)
+    { }
+
+    private void TrashPanel_DragEnter(object? sender, DragEventArgs e)
+    {
+        // Accept any move operations onto the trash
+        if(e.Data.GetDataPresent(typeof(int)) || e.Data.GetDataPresent(typeof(TrashDropPayload)))
+        {
+            e.Effect = DragDropEffects.Move;
+            if(sender is Control c)
+            {
+                c.BackColor = Color.FromArgb(200, 100, 50);
+                StartTrashAnimation();
+            }
+        }
+        else
+        {
+            e.Effect = DragDropEffects.None;
+        }
+    }
+
+    private void TrashPanel_DragLeave(object? sender, EventArgs e)
+    {
+        if(sender is Control c)
+        {
+            c.BackColor = Color.FromArgb(178, 134, 61);
+            StopTrashAnimation();
+        }
+    }
+
+    private void TrashPanel_DragDrop(object? sender, DragEventArgs e)
+    {
+        // Support two payload types: integer tab index (from tab drag) and TrashDropPayload for custom items
+        if(e.Data.GetDataPresent(typeof(int)) && sender is Panel)
+        {
+            int srcIndex = (int)e.Data.GetData(typeof(int));
+            // If a tab was dragged, remove that TabPage
+            if(_tabs is not null && srcIndex >= 0 && srcIndex < _tabs.TabCount)
+            {
+                _tabs.TabPages.RemoveAt(srcIndex);
+            }
+        }
+
+        if(e.Data.GetDataPresent(typeof(TrashDropPayload)))
+        {
+            var payload = e.Data.GetData(typeof(TrashDropPayload)) as TrashDropPayload;
+
+            try
+            {
+                payload?.Delete();
+            }
+            catch
+            {
+                // ignore
+            }
+        }
+
+        if(sender is Control c)
+        {
+            c.BackColor = Color.FromArgb(178, 134, 61);
+            StopTrashAnimation();
+        }
+    }
+
+    private void StartTrashAnimation()
+    {
+        if(_trashAnimating) return;
+        _trashAnimating = true;
+        _trashAnimationTick = 0;
+        _trashAnimationTimer.Start();
+    }
+
+    private void StopTrashAnimation()
+    {
+        if(!_trashAnimating) return;
+        _trashAnimating = false;
+        _trashAnimationTimer.Stop();
+        designerTrashPanel.Invalidate();
+    }
+
+    private void DesignerTrashPanel_Paint(object? sender, PaintEventArgs e)
+    {
+        // Paint a pulsing trash icon; use tick to scale
+        var g = e.Graphics;
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        var rect = designerTrashPanel.ClientRectangle;
+        Rectangle drawArea;
+
+        // Prefer drawing inside the designerTrashLabel bounds (left side) so it replaces the label
+        if(designerTrashLabel is not null)
+        {
+            var lb = designerTrashLabel.Bounds;
+            drawArea = new Rectangle(lb.Left + 2, lb.Top + 2, Math.Max(24, lb.Width - 4), Math.Max(24, lb.Height - 4));
+        }
+        else
+        {
+            int size = Math.Min(rect.Width, rect.Height) - 8;
+            drawArea = new Rectangle(rect.Left + (rect.Width - size) / 2, rect.Top + (rect.Height - size) / 2, size, size);
+        }
+
+        int size2 = Math.Min(drawArea.Width, drawArea.Height);
+        float scale = 1.0f + 0.06f * (float)Math.Sin(_trashAnimationTick * 0.3);
+        int w = (int)(size2 * scale);
+        int h = (int)(size2 * scale);
+        int x = drawArea.Left + (drawArea.Width - w) / 2;
+        int y = drawArea.Top + (drawArea.Height - h) / 2;
+
+        using var brush = new SolidBrush(Color.FromArgb(255, 240, 240));
+        using var pen = new Pen(Color.WhiteSmoke, 2);
+
+        // Simple trash bin shape
+        var binRect = new Rectangle(x, y + h / 6, w, h * 5 / 6);
+        g.FillRectangle(brush, binRect);
+        g.DrawRectangle(pen, binRect);
+
+        var lidRect = new Rectangle(x - w / 8, y, w + w / 4, h / 4);
+        g.FillRectangle(brush, lidRect);
+        g.DrawRectangle(pen, lidRect);
+    }
     private void aboutToolStripMenuItem_Click(object? sender, EventArgs e)
     {
         using AboutForm about = new();
 
         about.ShowDialog(this);
     }
-}
 
-internal sealed class TrashDropPayload(Action delete)
-{
-    public void Delete() => delete();
-}
-
-internal sealed class AppointmentAlarmDialog : Form
-{
-    private readonly CalendarEvent _appointment;
-    private readonly DomainUpDown _amount = new() { ReadOnly = true, Width = 58, TextAlign = HorizontalAlignment.Right };
-    private readonly ComboBox _unit = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 86 };
-    private readonly DateTimePicker _alarmDate = new() { Format = DateTimePickerFormat.Short, Width = 96 };
-    private readonly DateTimePicker _alarmTime = new() { Format = DateTimePickerFormat.Custom, CustomFormat = "h:mm tt", ShowUpDown = true, Width = 78 };
-    private readonly ComboBox _tune = new() { DropDownStyle = ComboBoxStyle.DropDown, Width = 170 };
-    private readonly TextBox _message = new() { Width = 245 };
-    private readonly TextBox _run = new() { Width = 245 };
-    private readonly CheckBox _displayDialog = new() { Text = "D&isplay dialog box at alarm time", AutoSize = true };
-    private readonly RadioButton _setAlarm = new() { Text = "Set A&larm", AutoSize = true };
-    private readonly RadioButton _cancelAlarm = new() { Text = "&Cancel Alarm", AutoSize = true };
-    private readonly RadioButton _before = new() { Text = "B&efore", AutoSize = true };
-    private readonly RadioButton _after = new() { Text = "&After", AutoSize = true };
-    private readonly RadioButton _on = new() { Text = "&On", AutoSize = true };
-    private readonly Label _appointmentTime = new() { AutoSize = true };
-
-    private AppointmentAlarmDialog(CalendarEvent appointment)
-    {
-        _appointment = appointment;
-        Text = "Alarm";
-        Width = 520;
-        Height = 292;
-        StartPosition = FormStartPosition.CenterParent;
-        MinimizeBox = false;
-        MaximizeBox = false;
-        FormBorderStyle = FormBorderStyle.FixedDialog;
-
-        for(int value = 0; value <= 999; value += 5)
-        {
-            _amount.Items.Add(value.ToString());
-        }
-
-        _unit.Items.AddRange(["Minutes", "Hours", "Days"]);
-        _tune.Items.AddRange(["Default", "Chime", "Ding", "Notify"]);
-
-        Panel? body = new()
-        {
-            Dock = DockStyle.Fill,
-            Padding = new Padding(12)
-        };
-
-        Button? playButton = new() { Text = "Play", Width = 82 };
-        Button? browseButton = new() { Text = "Bro&wse...", Width = 82 };
-        Button? runBrowseButton = new() { Text = "&Browse...", Width = 82 };
-
-        playButton.Click += (_, _) => System.Media.SystemSounds.Asterisk.Play();
-        browseButton.Click += (_, _) => ShowNotImplemented("Browse alarm tune");
-        runBrowseButton.Click += (_, _) => ShowNotImplemented("Browse run command");
-
-        _amount.Location = new Point(16, 14);
-        _unit.Location = new Point(82, 14);
-        _alarmDate.Location = new Point(180, 14);
-        _alarmTime.Location = new Point(286, 14);
-        body.Controls.AddRange([_amount, _unit, _alarmDate, _alarmTime]);
-
-        AddLabel(body, "T&une", 16, 49);
-        _tune.Location = new Point(82, 45);
-        playButton.Location = new Point(262, 43);
-        body.Controls.AddRange([_tune, playButton]);
-
-        AddLabel(body, "Me&ssage", 16, 84);
-        _message.Location = new Point(82, 80);
-        body.Controls.Add(_message);
-
-        AddLabel(body, "&Run", 16, 119);
-        _run.Location = new Point(82, 115);
-        browseButton.Location = new Point(336, 43);
-        runBrowseButton.Location = new Point(336, 113);
-        body.Controls.AddRange([_run, browseButton, runBrowseButton]);
-
-        _displayDialog.Location = new Point(82, 147);
-        body.Controls.Add(_displayDialog);
-
-        _setAlarm.Location = new Point(16, 190);
-        _cancelAlarm.Location = new Point(120, 190);
-        _appointmentTime.Location = new Point(16, 218);
-        _before.Location = new Point(260, 190);
-        _after.Location = new Point(330, 190);
-        _on.Location = new Point(392, 190);
-        body.Controls.AddRange([_setAlarm, _cancelAlarm, _appointmentTime, _before, _after, _on]);
-
-        Button? okButton = new() { Text = "OK", DialogResult = DialogResult.OK, Width = 82 };
-        Button? cancelButton = new() { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 82 };
-        Button? helpButton = new() { Text = "&Help", Width = 82 };
-
-        okButton.Click += (_, _) => SaveValues();
-        helpButton.Click += (_, _) => ShowNotImplemented("Help");
-
-        FlowLayoutPanel? buttons = new()
-        {
-            Dock = DockStyle.Right,
-            Width = 100,
-            Padding = new Padding(8, 12, 8, 8),
-            FlowDirection = FlowDirection.TopDown,
-            WrapContents = false
-        };
-        buttons.Controls.AddRange([okButton, cancelButton, helpButton]);
-
-        AcceptButton = okButton;
-        CancelButton = cancelButton;
-        Controls.Add(buttons);
-        Controls.Add(body);
-        LoadValues();
-    }
-
-    public static bool Edit(IWin32Window owner, CalendarEvent appointment)
-    {
-        using AppointmentAlarmDialog? dialog = new(appointment);
-
-        return dialog.ShowDialog(owner) == DialogResult.OK;
-    }
-
-    private void LoadValues()
-    {
-        _setAlarm.Checked = _appointment.AlarmEnabled;
-        _cancelAlarm.Checked = !_appointment.AlarmEnabled;
-        SelectItem(_amount, Math.Clamp(_appointment.AlarmAmount, 0, 999).ToString());
-        SelectItem(_unit, _appointment.AlarmUnit);
-        SelectItem(_tune, _appointment.AlarmTune);
-        _alarmDate.Value = _appointment.AlarmDate == default ? _appointment.Start.Date : _appointment.AlarmDate.Date;
-        _alarmTime.Value = DateTime.Today.Add((_appointment.AlarmTime == default ? _appointment.Start : _appointment.AlarmTime).TimeOfDay);
-        _message.Text = string.IsNullOrWhiteSpace(_appointment.AlarmMessage) ? _appointment.Title : _appointment.AlarmMessage;
-        _run.Text = _appointment.AlarmRunCommand;
-        _displayDialog.Checked = _appointment.AlarmDisplayDialog;
-        _before.Checked = _appointment.AlarmTiming == "Before";
-        _after.Checked = _appointment.AlarmTiming == "After";
-        _on.Checked = _appointment.AlarmTiming == "On" || (!_before.Checked && !_after.Checked);
-        _appointmentTime.Text = $"Appointment time {_appointment.Start:MMMM d, yyyy h:mm tt}";
-    }
-
-    private void SaveValues()
-    {
-        _appointment.AlarmEnabled = _setAlarm.Checked;
-        _appointment.AlarmAmount = int.TryParse(_amount.SelectedItem?.ToString(), out var amount) ? amount : 15;
-        _appointment.AlarmUnit = _unit.SelectedItem?.ToString() ?? "Minutes";
-        _appointment.AlarmTiming = _before.Checked ? "Before" : _after.Checked ? "After" : "On";
-        _appointment.AlarmTune = _tune.SelectedItem?.ToString() ?? "Default";
-        _appointment.AlarmDate = _alarmDate.Value.Date;
-        _appointment.AlarmTime = DateTime.Today.Add(_alarmTime.Value.TimeOfDay);
-        _appointment.AlarmMessage = _message.Text;
-        _appointment.AlarmRunCommand = _run.Text;
-        _appointment.AlarmDisplayDialog = _displayDialog.Checked;
-    }
-
-    private static void AddLabel(Control parent, string text, int x, int y) => parent.Controls.Add(new Label { Text = text, AutoSize = true, Location = new Point(x, y) });
-
-    private static void SelectItem(ComboBox control, string value)
-    {
-        int index = control.Items.Cast<object>().Select(item => item.ToString() ?? string.Empty).ToList().FindIndex(item => item.Equals(value, StringComparison.OrdinalIgnoreCase));
-
-        control.SelectedIndex = index >= 0 ? index : 0;
-    }
-
-    private static void SelectItem(DomainUpDown control, string value)
-    {
-        int index = control.Items.Cast<object>().Select(item => item.ToString() ?? string.Empty).ToList().FindIndex(item => item.Equals(value, StringComparison.OrdinalIgnoreCase));
-        control.SelectedIndex = index >= 0 ? index : 0;
-    }
-
-    private void ShowNotImplemented(string commandText) => MessageBox.Show(this, $"{commandText} is not yet implemented.", "Not Yet Implemented", MessageBoxButtons.OK, MessageBoxIcon.Information);
-}
-
-public sealed partial class CreateAppointmentDialog : Form
-{
-    private readonly CalendarEvent _appointment;
-    private readonly IReadOnlyCollection<CalendarEvent> _allAppointments;
-
-    private readonly DateTimePicker _date = new()
-    {
-        Format = DateTimePickerFormat.Short,
-        Width = 92
-    };
-
-    private readonly DateTimePicker _time = new()
-    {
-        Format = DateTimePickerFormat.Custom,
-        CustomFormat = "h:mm tt",
-        ShowUpDown = true,
-        Width = 74
-    };
-
-    private readonly DomainUpDown _duration = new()
-    {
-        ReadOnly = true,
-        TextAlign = HorizontalAlignment.Right,
-        Width = 54
-    };
-
-    private readonly TextBox _description = new() { Width = 360, Height = 86, Multiline = true, ScrollBars = ScrollBars.Vertical };
-    private readonly ComboBox _categories = new() { Width = 220 };
-    private readonly CheckBox _warnOfConflicts = new() { Text = "&Warn of conflicts", AutoSize = true };
-    private readonly CheckBox _pencilIn = new() { Text = "&Pencil in", AutoSize = true };
-    private readonly CheckBox _confidential = new() { Text = "Con&fidential", AutoSize = true };
-
-    private CreateAppointmentDialog(CalendarEvent appointment, string title, IReadOnlyCollection<CalendarEvent>? allAppointments)
-    {
-        _appointment = appointment;
-        _allAppointments = allAppointments ?? [];
-        Text = title;
-        Width = 560;
-        Height = 330;
-        StartPosition = FormStartPosition.CenterParent;
-        MinimizeBox = false;
-        MaximizeBox = false;
-        FormBorderStyle = FormBorderStyle.FixedDialog;
-
-        _categories.DropDownStyle = ComboBoxStyle.DropDown;
-        _categories.Items.AddRange(["Business", "Personal", "Holiday", "Travel", "Phone Call", "Meeting"]);
-        LoadDurationValues();
-
-        var body = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 2,
-            RowCount = 5,
-            Padding = new Padding(12),
-            AutoSize = true
-        };
-
-        body.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 95));
-        body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-
-        FlowLayoutPanel? schedulePanel = BuildSchedulePanel();
-
-        body.Controls.Add(schedulePanel, 0, 0);
-        body.SetColumnSpan(schedulePanel, 2);
-        AddRow(body, 1, "D&escription", _description);
-        AddRow(body, 2, "&Categories", _categories);
-
-        FlowLayoutPanel? flags = new() { FlowDirection = FlowDirection.LeftToRight, AutoSize = true, Dock = DockStyle.Fill };
-
-        flags.Controls.AddRange([_warnOfConflicts, _pencilIn, _confidential]);
-        body.Controls.Add(flags, 1, 3);
-
-        Button? linkButton = new() { Text = "Link to", Width = 90 };
-
-        linkButton.Click += (_, _) => ShowDialogStub("Link to");
-        body.Controls.Add(linkButton, 1, 4);
-
-        Button? okButton = new() { Text = "OK", Width = 78 };
-        Button? cancelButton = new() { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 78 };
-        Button? inviteButton = DialogButton("&Invite...");
-        Button? findTimeButton = DialogButton("Fi&nd Time");
-        Button? alarmButton = DialogButton("A&larm...", ShowAlarmDialog);
-        Button? repeatButton = DialogButton("&Repeat...");
-        Button? costButton = DialogButton("C&ost...");
-        Button? helpButton = DialogButton("&Help");
-
-        okButton.Click += (_, _) => SaveAndCloseIfValid();
-
-        var buttons = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Right,
-            Width = 104,
-            Padding = new Padding(8, 12, 8, 8),
-            FlowDirection = FlowDirection.TopDown,
-            WrapContents = false
-        };
-
-        buttons.Controls.Add(okButton);
-        buttons.Controls.Add(cancelButton);
-        buttons.Controls.Add(new Panel { Width = 82, Height = okButton.Height });
-        buttons.Controls.AddRange([inviteButton, findTimeButton, alarmButton, repeatButton, costButton, helpButton]);
-
-        AcceptButton = okButton;
-        CancelButton = cancelButton;
-        Controls.Add(buttons);
-        Controls.Add(body);
-        LoadValues();
-        Shown += (_, _) =>
-        {
-            _description.Focus();
-            _description.SelectionStart = _description.TextLength;
-            _description.SelectionLength = 0;
-        };
-    }
-
-    public static bool Edit(IWin32Window owner, CalendarEvent appointment, string title = "Create Appointment", IReadOnlyCollection<CalendarEvent>? allAppointments = null)
-    {
-        using CreateAppointmentDialog? dialog = new(appointment, title, allAppointments);
-
-        return dialog.ShowDialog(owner) == DialogResult.OK;
-    }
-
-    private FlowLayoutPanel BuildSchedulePanel()
-    {
-        FlowLayoutPanel? panel = new() { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, Margin = new Padding(0, 0, 0, 8) };
-
-        panel.Controls.Add(new Label { Text = "&Date", AutoSize = true, Padding = new Padding(0, 5, 1, 0) });
-        panel.Controls.Add(_date);
-        panel.Controls.Add(new Label { Text = "&Time", AutoSize = true, Padding = new Padding(6, 5, 1, 0) });
-        panel.Controls.Add(_time);
-        panel.Controls.Add(new Label { Text = "D&uration", AutoSize = true, Padding = new Padding(6, 5, 1, 0) });
-        panel.Controls.Add(BuildDurationPanel());
-
-        return panel;
-    }
-
-    private FlowLayoutPanel BuildDurationPanel()
-    {
-        FlowLayoutPanel? panel = new() { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, Margin = Padding.Empty };
-
-        panel.Controls.Add(_duration);
-
-        return panel;
-    }
-
-    private void LoadDurationValues()
-    {
-        _duration.Items.Clear();
-
-        for(var minutes = 5; minutes <= 24 * 60; minutes += 5)
-        {
-            _duration.Items.Add(FormatDuration(minutes));
-        }
-    }
-
-    private static void AddRow(TableLayoutPanel layout, int row, string labelText, Control control)
-    {
-        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        layout.Controls.Add(new Label { Text = labelText, AutoSize = true, Anchor = AnchorStyles.Left, Padding = new Padding(0, 5, 0, 0) }, 0, row);
-        layout.Controls.Add(control, 1, row);
-    }
-
-    private Button DialogButton(string text, Action? action = null)
-    {
-        Button? button = new() { Text = text, Width = 82 };
-
-        button.Click += (_, _) => (action ?? (() => ShowDialogStub(text)))();
-
-        return button;
-    }
-
-    private void ShowAlarmDialog()
-    {
-        SaveValues();
-        _ = AppointmentAlarmDialog.Edit(this, _appointment);
-        LoadValues();
-    }
-
-    private void LoadValues()
-    {
-        _date.Value = _appointment.Start.Date;
-        _time.Value = DateTime.Today.Add(_appointment.Start.TimeOfDay);
-
-        int totalMinutes = Math.Clamp((int)Math.Max(5, (_appointment.End - _appointment.Start).TotalMinutes), 5, 24 * 60);
-
-        totalMinutes = (int)(Math.Round(totalMinutes / 5d) * 5);
-        _duration.SelectedItem = FormatDuration(totalMinutes);
-        _description.Text = _appointment.Title;
-        _categories.Text = _appointment.Categories;
-        _warnOfConflicts.Checked = _appointment.WarnOfConflicts;
-        _pencilIn.Checked = _appointment.PencilIn;
-        _confidential.Checked = _appointment.Confidential;
-    }
-
-    private void SaveValues()
-    {
-        var start = _date.Value.Date.Add(_time.Value.TimeOfDay);
-        var durationMinutes = ParseDurationMinutes(_duration.Text);
-
-        _appointment.Title = _description.Text;
-        _appointment.Start = start;
-        _appointment.End = start.AddMinutes(durationMinutes);
-        _appointment.Categories = _categories.Text;
-        _appointment.WarnOfConflicts = _warnOfConflicts.Checked;
-        _appointment.PencilIn = _pencilIn.Checked;
-        _appointment.Confidential = _confidential.Checked;
-    }
-
-    private void SaveAndCloseIfValid()
-    {
-        DateTime start = _date.Value.Date.Add(_time.Value.TimeOfDay);
-        DateTime end = start.AddMinutes(ParseDurationMinutes(_duration.Text));
-
-        if(_warnOfConflicts.Checked && HasTimeConflict(start, end, out var message))
-        {
-            DialogResult result = MessageBox.Show(
-                this,
-                message + Environment.NewLine + Environment.NewLine + "Save the appointment anyway?",
-                "Appointment Conflict",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Warning);
-
-            if(result != DialogResult.Yes) return;
-        }
-
-        SaveValues();
-        DialogResult = DialogResult.OK;
-        Close();
-    }
-
-    private bool HasTimeConflict(DateTime start, DateTime end, out string message)
-    {
-        List<CalendarEvent>? conflicts = _allAppointments
-            .Where(other => !ReferenceEquals(other, _appointment) && other.Id != _appointment.Id&&start < other.End && end > other.Start)
-            .OrderBy(other => other.Start)
-            .Take(5)
-            .ToList();
-
-        if(conflicts.Count == 0)
-        {
-            message = string.Empty;
-
-            return false;
-        }
-
-        StringBuilder? builder = new();
-
-        builder.AppendLine("This appointment conflicts with:");
-
-        foreach(var conflict in conflicts)
-        {
-            string? title = string.IsNullOrWhiteSpace(conflict.Title) ? "(Untitled)" : conflict.Title;
-
-            builder.AppendLine($"- {conflict.Start:g} - {conflict.End:t}: {title}");
-        }
-
-        message = builder.ToString();
-
-        return true;
-    }
-
-    private static int ParseDurationMinutes(string value)
-    {
-        string[]? parts = value.Split(':');
-        int hours = parts.Length > 0 && int.TryParse(parts[0], out var parsedHours) ? Math.Clamp(parsedHours, 0, 24) : 0;
-        int minutes = parts.Length > 1 && int.TryParse(parts[1], out var parsedMinutes) ? Math.Clamp(parsedMinutes, 0, 59) : 0;
-
-        minutes = (int)(Math.Round(minutes / 5d) * 5);
-
-        if(minutes == 60)
-        {
-            hours = Math.Min(24, hours + 1);
-            minutes = 0;
-        }
-
-        int totalMinutes = (hours * 60) + minutes;
-
-        return Math.Clamp(totalMinutes, 5, 24 * 60);
-    }
-
-    private static string FormatDuration(int totalMinutes) => $"{totalMinutes / 60:00}:{totalMinutes % 60:00}";
-
-    private void ShowDialogStub(string commandText)
-    {
-        var cleanText = commandText.Replace("&", string.Empty, StringComparison.Ordinal).Replace("...", string.Empty, StringComparison.Ordinal);
-
-        MessageBox.Show(this, $"{cleanText} is not yet implemented.", "Not Yet Implemented", MessageBoxButtons.OK, MessageBoxIcon.Information);
-    }
-}
-
-internal enum CalendarViewMode
-{
-    Day,
-    Week,
-    Month
-}
-
-internal sealed partial class RecordEditorDialog : Form
-{
-    private readonly object _record;
-    private readonly Dictionary<PropertyInfo, Control> _controls = [];
-
-    public RecordEditorDialog()
-        : this(new Note(), "Record Editor")
-    {
-    }
-
-    private RecordEditorDialog(object record, string title)
-    {
-        InitializeComponent();
-        _record = record;
-        Text = title;
-        Width = 620;
-        Height = 560;
-        StartPosition = FormStartPosition.CenterParent;
-        MinimizeBox = false;
-        MaximizeBox = false;
-        FormBorderStyle = FormBorderStyle.FixedDialog;
-
-        TableLayoutPanel? layout = new()
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            Padding = new Padding(12),
-            AutoScroll = true
-        };
-
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-
-        foreach(PropertyInfo property in record.GetType().GetProperties().Where(p => p.CanRead && p.CanWrite && p.Name != "Id"))
-        {
-            int labelRow = layout.RowCount++;
-            int controlRow = layout.RowCount++;
-            Label? label = new()
-            {
-                Text = SplitName(property.Name),
-                AutoSize = true,
-                Dock = DockStyle.Top,
-                TextAlign = ContentAlignment.BottomLeft,
-                Padding = new Padding(0, 8, 0, 2)
-            };
-
-            Control? control = CreateControl(property, property.GetValue(record));
-
-            _controls[property] = control;
-            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            layout.Controls.Add(label, 0, labelRow);
-            layout.Controls.Add(control, 0, controlRow);
-        }
-
-        Button? okButton = new() { Text = "OK", DialogResult = DialogResult.OK, Width = 90 };
-        Button? cancelButton = new() { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 90 };
-
-        okButton.Click += (_, _) => SaveValues();
-
-        FlowLayoutPanel? buttons = new() { Dock = DockStyle.Bottom, Height = 48, Padding = new Padding(8), FlowDirection = FlowDirection.RightToLeft };
-
-        buttons.Controls.Add(cancelButton);
-        buttons.Controls.Add(okButton);
-
-        AcceptButton = okButton;
-        CancelButton = cancelButton;
-        Controls.Add(layout);
-        Controls.Add(buttons);
-    }
-
-    public static bool Edit(IWin32Window owner, object record, string title)
-    {
-        using RecordEditorDialog? dialog = new(record, title);
-
-        return dialog.ShowDialog(owner) == DialogResult.OK;
-    }
-
-    private static Control CreateControl(PropertyInfo property, object? value)
-    {
-        if(property.PropertyType == typeof(DateTime))
-        {
-            DateTimePicker? datePicker = new()
-            {
-                Value = value is DateTime date ? date : DateTime.Now,
-                Format = DateTimePickerFormat.Custom,
-                CustomFormat = property.DeclaringType == typeof(Anniversary) ? "MMMM d, yyyy" : "yyyy-MM-dd HH:mm",
-                Dock = DockStyle.Top
-            };
-
-            return datePicker;
-        }
-
-        if(property.PropertyType == typeof(bool)) return new CheckBox { Checked = value is true, Dock = DockStyle.Top };
-
-        if(property.PropertyType == typeof(int))
-        {
-            return new NumericUpDown
-            {
-                Value = value is int number ? Math.Clamp(number, 0, 999) : 0,
-                Minimum = 0,
-                Maximum = 999,
-                Dock = DockStyle.Top
-            };
-        }
-
-        if(property.Name == nameof(OrganizerTask.Priority))
-        {
-            FlowLayoutPanel? priorityPanel = new()
-            {
-                Dock = DockStyle.Top,
-                Height = 28,
-                FlowDirection = FlowDirection.LeftToRight,
-                Tag = nameof(OrganizerTask.Priority)
-            };
-
-            string? selectedPriority = NormalizePriority(value?.ToString());
-
-            foreach(string priority in new[] { "Low", "Medium", "High" })
-            {
-                priorityPanel.Controls.Add(new RadioButton
-                {
-                    Text = priority,
-                    Tag = priority,
-                    AutoSize = true,
-                    Checked = priority == selectedPriority
-                });
-            }
-
-            return priorityPanel;
-        }
-
-        if(property.Name == nameof(OrganizerTask.RepeatUnit))
-        {
-            ComboBox? repeatUnit = new()
-            {
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                Dock = DockStyle.Top
-            };
-
-            repeatUnit.Items.AddRange(["None", "Hours", "Days", "Weeks", "Months", "Years"]);
-            repeatUnit.SelectedItem = NormalizeRepeatUnit(value?.ToString());
-
-            return repeatUnit;
-        }
-
-        if(property.Name == nameof(Anniversary.Type))
-        {
-            ComboBox? type = new()
-            {
-                DropDownStyle = ComboBoxStyle.DropDown,
-                Dock = DockStyle.Top,
-                Text = string.IsNullOrWhiteSpace(value?.ToString()) ? "Anniversary" : value.ToString()
-            };
-
-            type.Items.AddRange(["Anniversary", "Birthday", "Holiday", "Special Occasion"]);
-
-            return type;
-        }
-
-        bool multiline = property.Name.Contains("Notes", StringComparison.OrdinalIgnoreCase)
-            || property.Name.Contains("Body", StringComparison.OrdinalIgnoreCase)
-            || property.Name.Contains("Address", StringComparison.OrdinalIgnoreCase);
-
-        return new TextBox
-        {
-            Text = value?.ToString() ?? string.Empty,
-            Multiline = multiline,
-            Height = multiline ? 90 : 24,
-            Dock = DockStyle.Top,
-            ScrollBars = multiline ? ScrollBars.Vertical : ScrollBars.None
-        };
-    }
-
-    private void SaveValues()
-    {
-        foreach(KeyValuePair<PropertyInfo, Control> pair in _controls)
-        {
-            object? value = pair.Value switch
-            {
-                TextBox textBox => textBox.Text,
-                FlowLayoutPanel { Tag: nameof(OrganizerTask.Priority) } priorityPanel => SelectedPriority(priorityPanel),
-                ComboBox comboBox => comboBox.SelectedItem?.ToString() ?? "None",
-                NumericUpDown numericUpDown => (int)numericUpDown.Value,
-                CheckBox checkBox => checkBox.Checked,
-                DateTimePicker datePicker => datePicker.Value,
-                _ => null
-            };
-
-            pair.Key.SetValue(_record, value);
-        }
-    }
-
-    private static string SplitName(string value) => string.Concat(value.Select((ch, index) => index > 0 && char.IsUpper(ch) ? " " + ch : ch.ToString()));
-
-    private static string NormalizePriority(string? value)
-    {
-        return value switch
-        {
-            "Medium" or "2" => "Medium",
-            "High" or "3" => "High",
-            _ => "Low"
-        };
-    }
-
-    private static string SelectedPriority(FlowLayoutPanel priorityPanel) => priorityPanel.Controls.OfType<RadioButton>().FirstOrDefault(radioButton => radioButton.Checked)?.Tag?.ToString() ?? "Low";
-
-    private static string NormalizeRepeatUnit(string? value)
-    {
-        return value switch
-        {
-            "Hours" or "Days" or "Weeks" or "Months" or "Years" => value,
-            _ => "None"
-        };
-    }
-}
-
-// Insertion point before OrganizerPreferencesDialog.
-internal sealed partial class PrinterSetupDialog : Form
-{
-    private readonly OrganizerPreferences _preferences;
-    private readonly ComboBox _printerName = new() { DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly ComboBox _paperSize = new() { DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly ComboBox _paperSource = new() { DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly RadioButton _portrait = new() { Text = "&Portrait", AutoSize = true };
-    private readonly RadioButton _landscape = new() { Text = "&Landscape", AutoSize = true };
-    private readonly NumericUpDown _leftMargin = MarginBox();
-    private readonly NumericUpDown _rightMargin = MarginBox();
-    private readonly NumericUpDown _topMargin = MarginBox();
-    private readonly NumericUpDown _bottomMargin = MarginBox();
-    private readonly Label _status = new() { AutoSize = true };
-    private readonly Label _type = new() { AutoSize = true };
-    private readonly Label _where = new() { AutoSize = true };
-    private readonly Label _comment = new() { AutoSize = true };
-
-    public PrinterSetupDialog()
-        : this(new OrganizerPreferences())
-    {
-    }
-
-    private PrinterSetupDialog(OrganizerPreferences preferences)
-    {
-        InitializeComponent();
-        _preferences = preferences;
-        Text = "Printer Setup";
-        Width = 520;
-        Height = 470;
-        StartPosition = FormStartPosition.CenterParent;
-        MinimizeBox = false;
-        MaximizeBox = false;
-        FormBorderStyle = FormBorderStyle.FixedDialog;
-
-        TableLayoutPanel? layout = new()
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            Padding = new Padding(12),
-            AutoScroll = true
-        };
-
-        layout.Controls.Add(BuildPrinterGroup());
-        layout.Controls.Add(BuildPaperGroup());
-        layout.Controls.Add(BuildOrientationGroup());
-        layout.Controls.Add(BuildMarginsGroup());
-
-        Button? okButton = new() { Text = "OK", DialogResult = DialogResult.OK, Width = 90 };
-        Button? cancelButton = new() { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 90 };
-        Button? helpButton = new() { Text = "&Help", Width = 90 };
-
-        okButton.Click += (_, _) => SaveValues();
-        helpButton.Click += (_, _) => ShowNotImplemented("Help Topics");
-
-        FlowLayoutPanel? buttons = new() { Dock = DockStyle.Bottom, Height = 48, Padding = new Padding(8), FlowDirection = FlowDirection.RightToLeft };
-        buttons.Controls.Add(helpButton);
-        buttons.Controls.Add(cancelButton);
-        buttons.Controls.Add(okButton);
-
-        AcceptButton = okButton;
-        CancelButton = cancelButton;
-        Controls.Add(layout);
-        Controls.Add(buttons);
-        LoadPrinters();
-        LoadValues();
-        UpdatePrinterDetails();
-    }
-
-    public static bool Edit(IWin32Window owner, OrganizerPreferences preferences)
-    {
-        using var dialog = new PrinterSetupDialog(preferences);
-        return dialog.ShowDialog(owner) == DialogResult.OK;
-    }
-
-    private GroupBox BuildPrinterGroup()
-    {
-        GroupBox? group = Group("Printer", 150);
-        TableLayoutPanel? layout = Grid(3);
-
-        layout.Controls.Add(new Label { Text = "&Name:", AutoSize = true }, 0, 0);
-        layout.Controls.Add(_printerName, 1, 0);
-        layout.Controls.Add(Button("Properties...", () => ShowNotImplemented("Printer Properties")), 2, 0);
-        layout.Controls.Add(new Label { Text = "Status:", AutoSize = true }, 0, 1);
-        layout.Controls.Add(_status, 1, 1);
-        layout.Controls.Add(new Label { Text = "Type:", AutoSize = true }, 0, 2);
-        layout.Controls.Add(_type, 1, 2);
-        layout.Controls.Add(new Label { Text = "Where:", AutoSize = true }, 0, 3);
-        layout.Controls.Add(_where, 1, 3);
-        layout.Controls.Add(new Label { Text = "Comment:", AutoSize = true }, 0, 4);
-        layout.Controls.Add(_comment, 1, 4);
-        _printerName.SelectedIndexChanged += (_, _) => UpdatePrinterDetails();
-        group.Controls.Add(layout);
-
-        return group;
-    }
-
-    private GroupBox BuildPaperGroup()
-    {
-        GroupBox? group = Group("Paper", 92);
-        TableLayoutPanel? layout = Grid(2);
-
-        layout.Controls.Add(new Label { Text = "Si&ze:", AutoSize = true }, 0, 0);
-        layout.Controls.Add(_paperSize, 1, 0);
-        layout.Controls.Add(new Label { Text = "S&ource:", AutoSize = true }, 0, 1);
-        layout.Controls.Add(_paperSource, 1, 1);
-        group.Controls.Add(layout);
-
-        return group;
-    }
-
-    private GroupBox BuildOrientationGroup()
-    {
-        var group = Group("Orientation", 58);
-        var panel = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(8), FlowDirection = FlowDirection.LeftToRight };
-        panel.Controls.Add(_portrait);
-        panel.Controls.Add(_landscape);
-        group.Controls.Add(panel);
-
-        return group;
-    }
-
-    private GroupBox BuildMarginsGroup()
-    {
-        GroupBox? group = Group("Margins (hundredths of an inch)", 98);
-        TableLayoutPanel? layout = Grid(4);
-
-        layout.Controls.Add(new Label { Text = "&Left:", AutoSize = true }, 0, 0);
-        layout.Controls.Add(_leftMargin, 1, 0);
-        layout.Controls.Add(new Label { Text = "&Right:", AutoSize = true }, 2, 0);
-        layout.Controls.Add(_rightMargin, 3, 0);
-        layout.Controls.Add(new Label { Text = "&Top:", AutoSize = true }, 0, 1);
-        layout.Controls.Add(_topMargin, 1, 1);
-        layout.Controls.Add(new Label { Text = "&Bottom:", AutoSize = true }, 2, 1);
-        layout.Controls.Add(_bottomMargin, 3, 1);
-        group.Controls.Add(layout);
-
-        return group;
-    }
-
-    private void LoadPrinters()
-    {
-        foreach(string printer in PrinterSettings.InstalledPrinters)
-        {
-            _printerName.Items.Add(printer);
-        }
-
-        if(_printerName.Items.Count == 0) _printerName.Items.Add("No printers installed");
-    }
-
-    private void LoadValues()
-    {
-        SelectPrinter(_preferences.PrinterName);
-        SelectItem(_paperSize, _preferences.PaperSize, "Letter");
-        SelectItem(_paperSource, _preferences.PaperSource, "Automatically Select");
-        _portrait.Checked = !_preferences.PrinterLandscape;
-        _landscape.Checked = _preferences.PrinterLandscape;
-        _leftMargin.Value = Math.Clamp(_preferences.MarginLeft, (int)_leftMargin.Minimum, (int)_leftMargin.Maximum);
-        _rightMargin.Value = Math.Clamp(_preferences.MarginRight, (int)_rightMargin.Minimum, (int)_rightMargin.Maximum);
-        _topMargin.Value = Math.Clamp(_preferences.MarginTop, (int)_topMargin.Minimum, (int)_topMargin.Maximum);
-        _bottomMargin.Value = Math.Clamp(_preferences.MarginBottom, (int)_bottomMargin.Minimum, (int)_bottomMargin.Maximum);
-    }
-
-    private void SaveValues()
-    {
-        _preferences.PrinterName = _printerName.SelectedItem?.ToString() is "No printers installed" ? string.Empty : _printerName.SelectedItem?.ToString() ?? string.Empty;
-        _preferences.PaperSize = _paperSize.SelectedItem?.ToString() ?? "Letter";
-        _preferences.PaperSource = _paperSource.SelectedItem?.ToString() ?? "Automatically Select";
-        _preferences.PrinterLandscape = _landscape.Checked;
-        _preferences.MarginLeft = (int)_leftMargin.Value;
-        _preferences.MarginRight = (int)_rightMargin.Value;
-        _preferences.MarginTop = (int)_topMargin.Value;
-        _preferences.MarginBottom = (int)_bottomMargin.Value;
-    }
-
-    private void SelectPrinter(string printerName)
-    {
-        if(!string.IsNullOrWhiteSpace(printerName) && _printerName.Items.Contains(printerName))
-        {
-            _printerName.SelectedItem = printerName;
-
-            return;
-        }
-
-        PrinterSettings? printerSettings = new();
-
-        _printerName.SelectedItem = _printerName.Items.Contains(printerSettings.PrinterName) ? printerSettings.PrinterName : _printerName.Items[0];
-    }
-
-    private void UpdatePrinterDetails()
-    {
-        _paperSize.Items.Clear();
-        _paperSource.Items.Clear();
-
-        string? printerName = _printerName.SelectedItem?.ToString() ?? string.Empty;
-
-        if(string.IsNullOrWhiteSpace(printerName) || printerName == "No printers installed")
-        {
-            _status.Text = "Unavailable";
-            _type.Text = string.Empty;
-            _where.Text = string.Empty;
-            _comment.Text = string.Empty;
-            _paperSize.Items.Add("Letter");
-            _paperSource.Items.Add("Automatically Select");
-            _paperSize.SelectedIndex = 0;
-            _paperSource.SelectedIndex = 0;
-
-            return;
-        }
-
-        PrinterSettings? settings = new() { PrinterName = printerName };
-
-        _status.Text = settings.IsValid ? "Ready" : "Unavailable";
-        _type.Text = settings.IsPlotter ? "Plotter" : "Printer";
-        _where.Text = settings.PrinterName;
-        _comment.Text = settings.IsDefaultPrinter ? "Default printer" : string.Empty;
-
-        foreach(PaperSize paperSize in settings.PaperSizes)
-        {
-            _paperSize.Items.Add(paperSize.PaperName);
-        }
-
-        foreach(PaperSource paperSource in settings.PaperSources)
-        {
-            _paperSource.Items.Add(paperSource.SourceName);
-        }
-
-        if(_paperSize.Items.Count == 0) _paperSize.Items.Add("Letter");
-        if(_paperSource.Items.Count == 0) _paperSource.Items.Add("Automatically Select");
-
-        SelectItem(_paperSize, _preferences.PaperSize, _paperSize.Items[0].ToString() ?? "Letter");
-        SelectItem(_paperSource, _preferences.PaperSource, _paperSource.Items[0].ToString() ?? "Automatically Select");
-    }
-
-    private static GroupBox Group(string text, int height) => new() { Text = text, Dock = DockStyle.Top, Height = height, Padding = new Padding(8) };
-
-    private static TableLayoutPanel Grid(int columns)
-    {
-        TableLayoutPanel? grid = new() { Dock = DockStyle.Fill, ColumnCount = columns, AutoSize = true };
-
-        for(int index = 0; index < columns; index++)
-        {
-            grid.ColumnStyles.Add(index % 2 == 0 ? new ColumnStyle(SizeType.AutoSize) : new ColumnStyle(SizeType.Percent, 100));
-        }
-
-        return grid;
-    }
-
-    private Button Button(string text, Action action)
-    {
-        Button? button = new() { Text = text, Width = 90 };
-
-        button.Click += (_, _) => action();
-
-        return button;
-    }
-
-    private static NumericUpDown MarginBox() => new() { Minimum = 0, Maximum = 999, Value = 100, Width = 70 };
-
-    private static void SelectItem(ComboBox comboBox, string value, string fallback)
+    private void designerCalendarLeftPanel_Paint(object sender, PaintEventArgs e)
     {
-        comboBox.SelectedItem = comboBox.Items.Cast<object>().FirstOrDefault(item => string.Equals(item.ToString(), value, StringComparison.OrdinalIgnoreCase))
-            ?? comboBox.Items.Cast<object>().FirstOrDefault(item => string.Equals(item.ToString(), fallback, StringComparison.OrdinalIgnoreCase))
-            ?? comboBox.Items[0];
-    }
-
-    private void ShowNotImplemented(string commandText) => MessageBox.Show(this, $"{commandText.Replace("&", string.Empty, StringComparison.Ordinal).Replace("...", string.Empty, StringComparison.Ordinal)} is not yet implemented.", "Not Yet Implemented", MessageBoxButtons.OK, MessageBoxIcon.Information);
-}
-
-internal sealed class OrganizerPreferencesDialog : Form
-{
-    private readonly OrganizerPreferences _preferences;
-    private readonly ComboBox _webBrowser = DropDown(["System default", "Internet Explorer", "Netscape Navigator", "Other"]);
-    private readonly CheckBox _useFirewall = new() { Text = "&Connect to the Internet through a firewall", AutoSize = true };
-    private readonly TextBox _proxyServer = new();
-    private readonly NumericUpDown _proxyPort = new() { Minimum = 0, Maximum = 65535 };
-    private readonly TextBox _proxyBypassDomains = new() { Multiline = true, Height = 60, ScrollBars = ScrollBars.Vertical };
-    private readonly ComboBox _favoriteAlarmTune = DropDown(["Default", "Chime", "Ding", "Notify"]);
-    private readonly CheckBox _displayMissedAlarms = new() { Text = "Displa&y missed alarms", AutoSize = true };
-    private readonly TextBox _organizerFilesPath = new();
-    private readonly TextBox _paperLayoutsPath = new();
-    private readonly TextBox _customSmartIconsPath = new();
-    private readonly TextBox _backupsPath = new();
-    private readonly CheckBox _animatedPageTurn = new() { Text = "A&nimated page turn", AutoSize = true };
-    private readonly RadioButton _plainPointer = new() { Text = "&Plain", AutoSize = true };
-    private readonly RadioButton _colorPointer = new() { Text = "&Color", AutoSize = true };
-    private readonly RadioButton _animatedPointer = new() { Text = "&Animated", AutoSize = true };
-    private readonly ComboBox _weekStartsOn = DropDown(["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]);
-    private readonly CheckBox _muteOrganizerSounds = new() { Text = "&Mute Organizer sounds", AutoSize = true };
-    private readonly CheckBox _autoCompleteContactNames = new() { Text = "&For Contacts, automatically complete names as they are typed.", AutoSize = true };
-    private readonly CheckBox _automaticallyOpen = new() { Text = "&Automatically open", AutoSize = true };
-    private readonly TextBox _automaticallyOpenPath = new();
-    private readonly CheckBox _alwaysStartWithNewOrganizerFile = new() { Text = "Always start with a &new Organizer file", AutoSize = true };
-    private readonly TextBox _baseNewOrganizersOnPath = new();
-    private readonly CheckBox _createBackupWhenClosed = new() { Text = "C&reate backup when closed", AutoSize = true };
-
-    private OrganizerPreferencesDialog(OrganizerPreferences preferences)
-    {
-        _preferences = preferences;
-        Text = "Organizer Preferences";
-        Width = 680;
-        Height = 560;
-        StartPosition = FormStartPosition.CenterParent;
-        MinimizeBox = false;
-        MaximizeBox = false;
-        FormBorderStyle = FormBorderStyle.FixedDialog;
-
-        TabControl? tabs = new() { Dock = DockStyle.Fill, Padding = new Point(12, 4) };
-        tabs.TabPages.Add(BuildDefaultFilePage());
-        tabs.TabPages.Add(BuildEnvironmentPage());
-        tabs.TabPages.Add(BuildFoldersPage());
-        tabs.TabPages.Add(BuildAlarmPage());
-        tabs.TabPages.Add(BuildWebBrowsingPage());
-
-        Button? okButton = new() { Text = "OK", DialogResult = DialogResult.OK, Width = 90 };
-        Button? cancelButton = new() { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 90 };
-        Button? helpButton = new() { Text = "&Help", Width = 90 };
-
-        okButton.Click += (_, _) => SaveValues();
-        helpButton.Click += (_, _) => ShowDialogStub("Help Topics");
-
-        FlowLayoutPanel? buttons = new() { Dock = DockStyle.Bottom, Height = 48, Padding = new Padding(8), FlowDirection = FlowDirection.RightToLeft };
-        buttons.Controls.Add(helpButton);
-        buttons.Controls.Add(cancelButton);
-        buttons.Controls.Add(okButton);
-
-        AcceptButton = okButton;
-        CancelButton = cancelButton;
-        Controls.Add(tabs);
-        Controls.Add(buttons);
-        LoadValues();
-    }
-
-    public static bool Edit(IWin32Window owner, OrganizerPreferences preferences)
-    {
-        using OrganizerPreferencesDialog? dialog = new (preferences);
-
-        return dialog.ShowDialog(owner) == DialogResult.OK;
-    }
-
-    private TabPage BuildWebBrowsingPage()
-    {
-        TabPage? page = Page("Web Browsing");
-        FlowLayoutPanel? body = Body(page);
-        ListBox? entries = new() { Height = 92 };
-
-        AddLabeled(body, "Web &browser", _webBrowser);
-        body.Controls.Add(Label("Use &Web entries stored in these files to log into protected Web sites"));
-        body.Controls.Add(Sized(entries));
-        body.Controls.Add(ButtonRow(Button("&Add..."), Button("&Remove"), Button("&Update Organizer's Web entry references on this computer")));
-        body.Controls.Add(_useFirewall);
-        AddLabeled(body, "Web pro&xy server", _proxyServer);
-        AddLabeled(body, "&Port", _proxyPort);
-        AddLabeled(body, "B&ypass proxy\r\nfor these domains", _proxyBypassDomains);
-        body.Controls.Add(Label("Use this browser to launch Web URLs from within Organizer"));
-        return page;
-    }
-
-    private TabPage BuildAlarmPage()
-    {
-        var page = Page("Alarms");
-        var body = Body(page);
-        AddLabeled(body, "&Favorite alarm tune:", _favoriteAlarmTune);
-        body.Controls.Add(ButtonRow(Button("Play", () => System.Media.SystemSounds.Asterisk.Play()), Button("Bro&wse...")));
-        body.Controls.Add(_displayMissedAlarms);
-        body.Controls.Add(Label("Use these Alarm settings as defaults"));
-        body.Controls.Add(BuildAlarmDefaultsGrid());
-
-        return page;
-    }
-
-    private TabPage BuildFoldersPage()
-    {
-        TabPage? page = Page("Folders");
-        FlowLayoutPanel? body = Body(page);
-
-        AddPathRow(body, "&Organizer files", _organizerFilesPath, "B&rowse...");
-        AddPathRow(body, "&Paper layouts", _paperLayoutsPath, "Bro&wse...");
-        AddPathRow(body, "Custom Smart&Icons", _customSmartIconsPath, "Brow&se...");
-        AddPathRow(body, "&Backups", _backupsPath, "Brows&e...");
-
-        return page;
-    }
-
-    private TabPage BuildEnvironmentPage()
-    {
-        TabPage? page = Page("Environment");
-        FlowLayoutPanel? body = Body(page);
-
-        body.Controls.Add(_animatedPageTurn);
-        body.Controls.Add(Label("Mouse pointer"));
-        body.Controls.Add(ButtonRow(_plainPointer, _colorPointer, _animatedPointer));
-        AddLabeled(body, "Wee&k starts on", _weekStartsOn);
-        body.Controls.Add(Label("&Sounds"));
-
-        ListBox? sounds = new() { Height = 70 };
-
-        sounds.Items.AddRange(["Appointment alarm", "Task alarm", "Page turn", "Error"]);
-        body.Controls.Add(Sized(sounds));
-        body.Controls.Add(ButtonRow(Button("Pla&y", () => System.Media.SystemSounds.Asterisk.Play()), Button("S&top"), Button("So&unds...")));
-        body.Controls.Add(_muteOrganizerSounds);
-        body.Controls.Add(_autoCompleteContactNames);
-
-        return page;
-    }
-
-    private TabPage BuildDefaultFilePage()
-    {
-        var page = Page("Default File");
-        var body = Body(page);
-        body.Controls.Add(_automaticallyOpen);
-        AddPathRow(body, string.Empty, _automaticallyOpenPath, "B&rowse...");
-        body.Controls.Add(_alwaysStartWithNewOrganizerFile);
-        AddPathRow(body, "&Base new Organizers on", _baseNewOrganizersOnPath, "Br&owse...");
-        body.Controls.Add(Label("Backup"));
-        body.Controls.Add(_createBackupWhenClosed);
-        body.Controls.Add(ButtonRow(Button("&Make backup now")));
-
-        return page;
-    }
-
-    private static TabPage Page(string text)
-    {
-        TabPage? page = new(text)
-        {
-            Padding = new Padding(12),
-            BackColor = SystemColors.Control
-        };
-
-        page.Controls.Add(new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            AutoScroll = true,
-            FlowDirection = FlowDirection.TopDown,
-            WrapContents = false
-        });
-
-        return page;
-    }
-
-    private static FlowLayoutPanel Body(TabPage page) => (FlowLayoutPanel)page.Controls[0];
-
-    private static Label Label(string text) => new() { Text = text, AutoSize = true, Margin = new Padding(0, 8, 0, 2) };
-
-    private static T Sized<T>(T control) where T : Control
-    {
-        control.Width = 590;
-        return control;
-    }
-
-    private TableLayoutPanel BuildAlarmDefaultsGrid()
-    {
-        TableLayoutPanel? grid = new() { ColumnCount = 5, RowCount = 6, Dock = DockStyle.Top, AutoSize = true };
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 105));
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 105));
-        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
-        grid.Controls.Add(new Label { Text = "Section", AutoSize = true }, 0, 0);
-        grid.Controls.Add(new Label { Text = "Set Alarm", AutoSize = true }, 1, 0);
-        grid.Controls.Add(new Label { Text = "Amount", AutoSize = true }, 2, 0);
-        grid.Controls.Add(new Label { Text = "Unit", AutoSize = true }, 3, 0);
-        grid.Controls.Add(new Label { Text = "When", AutoSize = true }, 4, 0);
-
-        int row = 1;
-        foreach(string section in new[] { "A&nniversary", "&Appointment", "Ca&ll", "&Event", "&Task" })
-        {
-            grid.Controls.Add(new Label { Text = section, AutoSize = true, Padding = new Padding(0, 4, 0, 0) }, 0, row);
-            grid.Controls.Add(new CheckBox { Text = "On", AutoSize = true }, 1, row);
-            grid.Controls.Add(new NumericUpDown { Minimum = 0, Maximum = 999, Value = 15, Width = 70 }, 2, row);
-            grid.Controls.Add(DropDown(["Minutes", "Hours", "Days"]), 3, row);
-            grid.Controls.Add(DropDown(["Before", "After"]), 4, row);
-            row++;
-        }
-
-        return grid;
-    }
-
-    private static void AddLabeled(Control parent, string text, Control control)
-    {
-        parent.Controls.Add(Label(text));
-        control.Width = 590;
-        parent.Controls.Add(control);
-    }
-
-    private void AddPathRow(Control parent, string label, TextBox textBox, string buttonText)
-    {
-        var panel = new TableLayoutPanel { Width = 590, Height = 30, ColumnCount = 2 };
-        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 92));
-        textBox.Dock = DockStyle.Fill;
-        panel.Controls.Add(textBox, 0, 0);
-
-        if(!string.IsNullOrWhiteSpace(label)) parent.Controls.Add(Label(label));
-
-        panel.Controls.Add(BrowseButton(buttonText, textBox), 1, 0);
-        parent.Controls.Add(panel);
-    }
-
-    private static FlowLayoutPanel ButtonRow(params Control[] controls)
-    {
-        FlowLayoutPanel? panel = new() { Width = 590, Height = 34, FlowDirection = FlowDirection.LeftToRight };
-
-        panel.Controls.AddRange(controls);
-
-        return panel;
-    }
-
-    private Button Button(string text, Action? action = null)
-    {
-        var button = new Button { Text = text, Width = Math.Max(90, TextRenderer.MeasureText(text.Replace("&", string.Empty, StringComparison.Ordinal), SystemFonts.MessageBoxFont).Width + 24) };
-        button.Click += (_, _) => (action ?? (() => ShowDialogStub(text)))();
-
-        return button;
-    }
-
-    private Button BrowseButton(string text, TextBox target)
-    {
-        Button? button = Button(text, () =>
-        {
-            using var dialog = new FolderBrowserDialog { SelectedPath = Directory.Exists(target.Text) ? target.Text : Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments) };
-
-            if(dialog.ShowDialog(this) == DialogResult.OK) target.Text = dialog.SelectedPath;
-        });
-
-        button.Width = 88;
-
-        return button;
-    }
-
-    private static ComboBox DropDown(string[] values)
-    {
-        var comboBox = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
-        comboBox.Items.AddRange(values);
-
-        if(comboBox.Items.Count > 0) comboBox.SelectedIndex = 0;
-
-        return comboBox;
-    }
-
-    private void LoadValues()
-    {
-        SelectItem(_webBrowser, _preferences.WebBrowser);
-        _useFirewall.Checked = _preferences.UseFirewall;
-        _proxyServer.Text = _preferences.ProxyServer;
-        _proxyPort.Value = Math.Clamp(_preferences.ProxyPort, (int)_proxyPort.Minimum, (int)_proxyPort.Maximum);
-        _proxyBypassDomains.Text = _preferences.ProxyBypassDomains;
-        SelectItem(_favoriteAlarmTune, _preferences.FavoriteAlarmTune);
-        _displayMissedAlarms.Checked = _preferences.DisplayMissedAlarms;
-        _organizerFilesPath.Text = _preferences.OrganizerFilesPath;
-        _paperLayoutsPath.Text = _preferences.PaperLayoutsPath;
-        _customSmartIconsPath.Text = _preferences.CustomSmartIconsPath;
-        _backupsPath.Text = _preferences.BackupsPath;
-        _animatedPageTurn.Checked = _preferences.AnimatedPageTurn;
-        _plainPointer.Checked = _preferences.MousePointer == "Plain";
-        _animatedPointer.Checked = _preferences.MousePointer == "Animated";
-        _colorPointer.Checked = !_plainPointer.Checked && !_animatedPointer.Checked;
-        SelectItem(_weekStartsOn, _preferences.WeekStartsOn);
-        _muteOrganizerSounds.Checked = _preferences.MuteOrganizerSounds;
-        _autoCompleteContactNames.Checked = _preferences.AutoCompleteContactNames;
-        _automaticallyOpen.Checked = _preferences.AutomaticallyOpen;
-        _automaticallyOpenPath.Text = _preferences.AutomaticallyOpenPath;
-        _alwaysStartWithNewOrganizerFile.Checked = _preferences.AlwaysStartWithNewOrganizerFile;
-        _baseNewOrganizersOnPath.Text = _preferences.BaseNewOrganizersOnPath;
-        _createBackupWhenClosed.Checked = _preferences.CreateBackupWhenClosed;
-    }
-
-    private void SaveValues()
-    {
-        _preferences.WebBrowser = _webBrowser.SelectedItem?.ToString() ?? "System default";
-        _preferences.UseFirewall = _useFirewall.Checked;
-        _preferences.ProxyServer = _proxyServer.Text;
-        _preferences.ProxyPort = (int)_proxyPort.Value;
-        _preferences.ProxyBypassDomains = _proxyBypassDomains.Text;
-        _preferences.FavoriteAlarmTune = _favoriteAlarmTune.SelectedItem?.ToString() ?? "Default";
-        _preferences.DisplayMissedAlarms = _displayMissedAlarms.Checked;
-        _preferences.OrganizerFilesPath = _organizerFilesPath.Text;
-        _preferences.PaperLayoutsPath = _paperLayoutsPath.Text;
-        _preferences.CustomSmartIconsPath = _customSmartIconsPath.Text;
-        _preferences.BackupsPath = _backupsPath.Text;
-        _preferences.AnimatedPageTurn = _animatedPageTurn.Checked;
-        _preferences.MousePointer = _plainPointer.Checked ? "Plain" : _animatedPointer.Checked ? "Animated" : "Color";
-        _preferences.WeekStartsOn = _weekStartsOn.SelectedItem?.ToString() ?? "Sunday";
-        _preferences.MuteOrganizerSounds = _muteOrganizerSounds.Checked;
-        _preferences.AutoCompleteContactNames = _autoCompleteContactNames.Checked;
-        _preferences.AutomaticallyOpen = _automaticallyOpen.Checked;
-        _preferences.AutomaticallyOpenPath = _automaticallyOpenPath.Text;
-        _preferences.AlwaysStartWithNewOrganizerFile = _alwaysStartWithNewOrganizerFile.Checked;
-        _preferences.BaseNewOrganizersOnPath = _baseNewOrganizersOnPath.Text;
-        _preferences.CreateBackupWhenClosed = _createBackupWhenClosed.Checked;
-    }
-
-    private static void SelectItem(ComboBox comboBox, string value) => comboBox.SelectedItem = comboBox.Items.Cast<object>().FirstOrDefault(item => string.Equals(item.ToString(), value, StringComparison.OrdinalIgnoreCase)) ?? comboBox.Items[0];
-
-    private void ShowDialogStub(string commandText)
-    {
-        string? cleanText = commandText.Split('\t')[0].Replace("&", string.Empty, StringComparison.Ordinal).Replace("...", string.Empty, StringComparison.Ordinal);
-
-        MessageBox.Show(this, $"{cleanText} is not yet implemented.", "Not Yet Implemented", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 }

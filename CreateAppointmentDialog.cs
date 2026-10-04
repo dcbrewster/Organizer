@@ -3,7 +3,7 @@ using System.Text;
 
 namespace Organizer;
 
-public sealed partial class CreateAppointmentDialog : Form
+public sealed partial class CreateAppointmentDialog : DialogBase
 {
     private readonly CalendarEvent _appointment;
     private readonly IReadOnlyCollection<CalendarEvent> _allAppointments;
@@ -53,6 +53,9 @@ public sealed partial class CreateAppointmentDialog : Form
         Width = 560;
         Height = 330;
         StartPosition = FormStartPosition.CenterParent;
+        // Dialog behavior: modal dialog appearance without taskbar icon
+        ShowInTaskbar = false;
+        ShowIcon = false;
         MinimizeBox = false;
         MaximizeBox = false;
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -61,7 +64,7 @@ public sealed partial class CreateAppointmentDialog : Form
         _categories.Items.AddRange(["Business", "Personal", "Holiday", "Travel", "Phone Call", "Meeting"]);
         LoadDurationValues();
 
-        var body = new TableLayoutPanel
+        TableLayoutPanel? body = new()
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
@@ -73,31 +76,31 @@ public sealed partial class CreateAppointmentDialog : Form
         body.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 95));
         body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
-        var schedulePanel = BuildSchedulePanel();
+        FlowLayoutPanel? schedulePanel = BuildSchedulePanel();
         body.Controls.Add(schedulePanel, 0, 0);
         body.SetColumnSpan(schedulePanel, 2);
         AddRow(body, 1, "D&escription", _description);
         AddRow(body, 2, "&Categories", _categories);
 
-        var flags = new FlowLayoutPanel { FlowDirection = FlowDirection.LeftToRight, AutoSize = true, Dock = DockStyle.Fill };
+        FlowLayoutPanel? flags = new() { FlowDirection = FlowDirection.LeftToRight, AutoSize = true, Dock = DockStyle.Fill };
         flags.Controls.AddRange([_warnOfConflicts, _pencilIn, _confidential]);
         body.Controls.Add(flags, 1, 3);
 
-        var linkButton = new Button { Text = "Link to", Width = 90 };
+        Button? linkButton = new() { Text = "Link to", Width = 90 };
         linkButton.Click += (_, _) => ShowDialogStub("Link to");
         body.Controls.Add(linkButton, 1, 4);
 
-        var okButton = new Button { Text = "OK", Width = 78 };
-        var cancelButton = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 78 };
-        var inviteButton = DialogButton("&Invite...");
-        var findTimeButton = DialogButton("Fi&nd Time");
-        var alarmButton = DialogButton("A&larm...", ShowAlarmDialog);
-        var repeatButton = DialogButton("&Repeat...");
-        var costButton = DialogButton("C&ost...");
-        var helpButton = DialogButton("&Help");
+        Button? okButton = new() { Text = "OK", Width = 78 };
+        Button? cancelButton = new() { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 78 };
+        Button? inviteButton = DialogButton("&Invite...");
+        Button? findTimeButton = DialogButton("Fi&nd Time");
+        Button? alarmButton = DialogButton("A&larm...", ShowAlarmDialog);
+        Button? repeatButton = DialogButton("&Repeat...");
+        Button? costButton = DialogButton("C&ost...");
+        Button? helpButton = DialogButton("&Help");
         okButton.Click += (_, _) => SaveAndCloseIfValid();
 
-        var buttons = new FlowLayoutPanel
+        FlowLayoutPanel? buttons = new()
         {
             Dock = DockStyle.Right,
             Width = 104,
@@ -126,14 +129,14 @@ public sealed partial class CreateAppointmentDialog : Form
 
     public static bool Edit(IWin32Window owner, CalendarEvent appointment, string title = "Create Appointment", IReadOnlyCollection<CalendarEvent>? allAppointments = null)
     {
-        using var dialog = new CreateAppointmentDialog(appointment, title, allAppointments);
+        using CreateAppointmentDialog? dialog = new(appointment, title, allAppointments);
 
         return dialog.ShowDialog(owner) == DialogResult.OK;
     }
 
     private FlowLayoutPanel BuildSchedulePanel()
     {
-        var panel = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, Margin = new Padding(0, 0, 0, 8) };
+        FlowLayoutPanel? panel = new() { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, Margin = new Padding(0, 0, 0, 8) };
 
         panel.Controls.Add(new Label { Text = "&Date", AutoSize = true, Padding = new Padding(0, 5, 1, 0) });
         panel.Controls.Add(_date);
@@ -147,7 +150,7 @@ public sealed partial class CreateAppointmentDialog : Form
 
     private FlowLayoutPanel BuildDurationPanel()
     {
-        var panel = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, Margin = Padding.Empty };
+        FlowLayoutPanel? panel = new() { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, Margin = Padding.Empty };
         panel.Controls.Add(_duration);
 
         return panel;
@@ -156,7 +159,8 @@ public sealed partial class CreateAppointmentDialog : Form
     private void LoadDurationValues()
     {
         _duration.Items.Clear();
-        for(var minutes = 5; minutes <= 24 * 60; minutes += 5)
+
+        for(int minutes = 5; minutes <= 24 * 60; minutes += 5)
         {
             _duration.Items.Add(FormatDuration(minutes));
         }
@@ -165,13 +169,15 @@ public sealed partial class CreateAppointmentDialog : Form
     private static void AddRow(TableLayoutPanel layout, int row, string labelText, Control control)
     {
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        layout.Controls.Add(new Label { Text = labelText, AutoSize = true, Anchor = AnchorStyles.Left, Padding = new Padding(0, 5, 0, 0) }, 0, row);
+        // Align label to top when the control is a multiline text box so the label sits at the top of the field
+        AnchorStyles labelAnchor = control is TextBox tb && tb.Multiline ? (AnchorStyles.Top | AnchorStyles.Left) : AnchorStyles.Left;
+        layout.Controls.Add(new Label { Text = labelText, AutoSize = true, Anchor = labelAnchor, Padding = new Padding(0, 5, 0, 0) }, 0, row);
         layout.Controls.Add(control, 1, row);
     }
 
     private Button DialogButton(string text, Action? action = null)
     {
-        var button = new Button { Text = text, Width = 82 };
+        Button? button = new() { Text = text, Width = 82 };
 
         button.Click += (_, _) => (action ?? (() => ShowDialogStub(text)))();
 
@@ -189,7 +195,9 @@ public sealed partial class CreateAppointmentDialog : Form
     {
         _date.Value = _appointment.Start.Date;
         _time.Value = DateTime.Today.Add(_appointment.Start.TimeOfDay);
-        var totalMinutes = Math.Clamp((int)Math.Max(5, (_appointment.End - _appointment.Start).TotalMinutes), 5, 24 * 60);
+
+        int totalMinutes = Math.Clamp((int)Math.Max(5, (_appointment.End - _appointment.Start).TotalMinutes), 5, 24 * 60);
+
         totalMinutes = (int)(Math.Round(totalMinutes / 5d) * 5);
         _duration.SelectedItem = FormatDuration(totalMinutes);
         _description.Text = _appointment.Title;
@@ -201,8 +209,8 @@ public sealed partial class CreateAppointmentDialog : Form
 
     private void SaveValues()
     {
-        var start = _date.Value.Date.Add(_time.Value.TimeOfDay);
-        var durationMinutes = ParseDurationMinutes(_duration.Text);
+        DateTime start = _date.Value.Date.Add(_time.Value.TimeOfDay);
+        int durationMinutes = ParseDurationMinutes(_duration.Text);
 
         _appointment.Title = _description.Text;
         _appointment.Start = start;
@@ -215,12 +223,21 @@ public sealed partial class CreateAppointmentDialog : Form
 
     private void SaveAndCloseIfValid()
     {
-        var start = _date.Value.Date.Add(_time.Value.TimeOfDay);
-        var end = start.AddMinutes(ParseDurationMinutes(_duration.Text));
-
-        if(_warnOfConflicts.Checked && HasTimeConflict(start, end, out var message))
+        // Validate required fields
+        if(string.IsNullOrWhiteSpace(_description.Text))
         {
-            var result = MessageBox.Show(
+            MessageBox.Show(this, "Description is required.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            _description.Focus();
+
+            return;
+        }
+
+        DateTime start = _date.Value.Date.Add(_time.Value.TimeOfDay);
+        DateTime end = start.AddMinutes(ParseDurationMinutes(_duration.Text));
+
+        if(_warnOfConflicts.Checked && HasTimeConflict(start, end, out string? message))
+        {
+            DialogResult result = MessageBox.Show(
                 this,
                 message + Environment.NewLine + Environment.NewLine + "Save the appointment anyway?",
                 "Appointment Conflict",
@@ -237,9 +254,9 @@ public sealed partial class CreateAppointmentDialog : Form
 
     private bool HasTimeConflict(DateTime start, DateTime end, out string message)
     {
-        var conflicts = _allAppointments
-            .Where(other => !ReferenceEquals(other, _appointment) && other.Id != _appointment.Id)
-            .Where(other => start < other.End && end > other.Start)
+        List<CalendarEvent>? conflicts = _allAppointments
+            .Where(other => !ReferenceEquals(other, _appointment)
+                && other.Id != _appointment.Id&&start < other.End && end > other.Start)
             .OrderBy(other => other.Start)
             .Take(5)
             .ToList();
@@ -247,26 +264,30 @@ public sealed partial class CreateAppointmentDialog : Form
         if(conflicts.Count == 0)
         {
             message = string.Empty;
+
             return false;
         }
 
-        var builder = new StringBuilder();
+        StringBuilder? builder = new();
+
         builder.AppendLine("This appointment conflicts with:");
-        foreach(var conflict in conflicts)
+
+        foreach(CalendarEvent conflict in conflicts)
         {
-            var title = string.IsNullOrWhiteSpace(conflict.Title) ? "(Untitled)" : conflict.Title;
+            string? title = string.IsNullOrWhiteSpace(conflict.Title) ? "(Untitled)" : conflict.Title;
             builder.AppendLine($"- {conflict.Start:g} - {conflict.End:t}: {title}");
         }
 
         message = builder.ToString();
+
         return true;
     }
 
     private static int ParseDurationMinutes(string value)
     {
-        var parts = value.Split(':');
-        var hours = parts.Length > 0 && int.TryParse(parts[0], out var parsedHours) ? Math.Clamp(parsedHours, 0, 24) : 0;
-        var minutes = parts.Length > 1 && int.TryParse(parts[1], out var parsedMinutes) ? Math.Clamp(parsedMinutes, 0, 59) : 0;
+        string[]? parts = value.Split(':');
+        int hours = parts.Length > 0 && int.TryParse(parts[0], out int parsedHours) ? Math.Clamp(parsedHours, 0, 24) : 0;
+        int minutes = parts.Length > 1 && int.TryParse(parts[1], out int parsedMinutes) ? Math.Clamp(parsedMinutes, 0, 59) : 0;
         minutes = (int)(Math.Round(minutes / 5d) * 5);
 
         if(minutes == 60)
@@ -275,7 +296,7 @@ public sealed partial class CreateAppointmentDialog : Form
             minutes = 0;
         }
 
-        var totalMinutes = (hours * 60) + minutes;
+        int totalMinutes = (hours * 60) + minutes;
 
         return Math.Clamp(totalMinutes, 5, 24 * 60);
     }
@@ -284,7 +305,7 @@ public sealed partial class CreateAppointmentDialog : Form
 
     private void ShowDialogStub(string commandText)
     {
-        var cleanText = commandText.Replace("&", string.Empty, StringComparison.Ordinal).Replace("...", string.Empty, StringComparison.Ordinal);
+        string? cleanText = commandText.Replace("&", string.Empty, StringComparison.Ordinal).Replace("...", string.Empty, StringComparison.Ordinal);
         MessageBox.Show(this, $"{cleanText} is not yet implemented.", "Not Yet Implemented", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 }

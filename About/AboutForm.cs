@@ -44,7 +44,7 @@ public partial class AboutForm : Form
 
         ContributorList? credits = JsonSerializer.Deserialize<ContributorList>(File.ReadAllText(file));
 
-        List<string> lines = ["CONTRIBUTORS", ""];
+        List<string> lines = ["CONTRIBUTORS", "",];
 
         // Add each contributor's role and name to the lines list, followed by an empty line for spacing.
         foreach(Contributor contributor in credits.Contributors)
@@ -70,8 +70,6 @@ public partial class AboutForm : Form
     /// <summary>
     /// Handles the click event of the close button, closing the form when clicked.
     /// </summary>
-    /// <param name="sender"></param>
-    /// <param name="e"></param>
     private void btnClose_Click(object sender, EventArgs e) => Close();
 
     private void LinkWebsite_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
@@ -94,7 +92,7 @@ public partial class AboutForm : Form
         Process.Start(
             new ProcessStartInfo
             {
-                FileName = "mailto:support@forestcitysoftware.com",
+                FileName = "mailto:dave.brewster@forestcitysoftware.com",
                 UseShellExecute = true
             });
     }

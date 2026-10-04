@@ -35,7 +35,7 @@ public sealed partial class OrganizerPreferencesDialog
     /// </summary>
     private void InitializeComponent()
     {
-        components = new System.ComponentModel.Container();
+        System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(OrganizerPreferencesDialog));
         designerTabs = new TabControl();
         designerDefaultFilePage = new TabPage();
         designerEnvironmentPage = new TabPage();
@@ -43,68 +43,121 @@ public sealed partial class OrganizerPreferencesDialog
         designerAlarmsPage = new TabPage();
         designerWebBrowsingPage = new TabPage();
         designerButtonPanel = new FlowLayoutPanel();
-        designerOkButton = new Button();
-        designerCancelButton = new Button();
         designerHelpButton = new Button();
-
-        designerDefaultFilePage.Text = "Default File";
-        designerDefaultFilePage.Controls.Add(new Label { Text = "Default organizer file settings", AutoSize = true, Location = new Point(12, 16) });
-        designerDefaultFilePage.Controls.Add(new CheckBox { Text = "&Automatically open", AutoSize = true, Location = new Point(12, 48) });
-        designerDefaultFilePage.Controls.Add(new CheckBox { Text = "Always start with a &new Organizer file", AutoSize = true, Location = new Point(12, 80) });
-
-        designerEnvironmentPage.Text = "Environment";
-        designerEnvironmentPage.Controls.Add(new CheckBox { Text = "A&nimated page turn", AutoSize = true, Location = new Point(12, 16) });
-        designerEnvironmentPage.Controls.Add(new Label { Text = "Mouse pointer", AutoSize = true, Location = new Point(12, 52) });
-
-        designerFoldersPage.Text = "Folders";
-        designerFoldersPage.Controls.Add(new Label { Text = "&Organizer files", AutoSize = true, Location = new Point(12, 16) });
-        designerFoldersPage.Controls.Add(new TextBox { Location = new Point(12, 40), Width = 520 });
-
-        designerAlarmsPage.Text = "Alarms";
-        designerAlarmsPage.Controls.Add(new Label { Text = "&Favorite alarm tune:", AutoSize = true, Location = new Point(12, 16) });
-        designerAlarmsPage.Controls.Add(new ComboBox { Location = new Point(12, 40), Width = 200, DropDownStyle = ComboBoxStyle.DropDownList });
-        designerAlarmsPage.Controls.Add(new CheckBox { Text = "Displa&y missed alarms", AutoSize = true, Location = new Point(12, 76) });
-
-        designerWebBrowsingPage.Text = "Web Browsing";
-        designerWebBrowsingPage.Controls.Add(new Label { Text = "Web &browser", AutoSize = true, Location = new Point(12, 16) });
-        designerWebBrowsingPage.Controls.Add(new ComboBox { Location = new Point(12, 40), Width = 240, DropDownStyle = ComboBoxStyle.DropDownList });
-        designerWebBrowsingPage.Controls.Add(new CheckBox { Text = "&Connect to the Internet through a firewall", AutoSize = true, Location = new Point(12, 76) });
-
+        designerCancelButton = new Button();
+        designerOkButton = new Button();
+        designerTabs.SuspendLayout();
+        designerButtonPanel.SuspendLayout();
+        SuspendLayout();
+        // 
+        // designerTabs
+        // 
+        designerTabs.Controls.Add(designerDefaultFilePage);
+        designerTabs.Controls.Add(designerEnvironmentPage);
+        designerTabs.Controls.Add(designerFoldersPage);
+        designerTabs.Controls.Add(designerAlarmsPage);
+        designerTabs.Controls.Add(designerWebBrowsingPage);
         designerTabs.Dock = DockStyle.Fill;
+        designerTabs.Location = new Point(0, 0);
+        designerTabs.Name = "designerTabs";
         designerTabs.Padding = new Point(12, 4);
-        designerTabs.TabPages.AddRange(new TabPage[]
-        {
-            designerDefaultFilePage,
-            designerEnvironmentPage,
-            designerFoldersPage,
-            designerAlarmsPage,
-            designerWebBrowsingPage
-        });
-
-        designerOkButton.Text = "OK";
-        designerOkButton.Width = 90;
-        designerCancelButton.Text = "Cancel";
-        designerCancelButton.Width = 90;
-        designerHelpButton.Text = "&Help";
-        designerHelpButton.Width = 90;
-
-        designerButtonPanel.Dock = DockStyle.Bottom;
-        designerButtonPanel.Height = 48;
-        designerButtonPanel.Padding = new Padding(8);
-        designerButtonPanel.FlowDirection = FlowDirection.RightToLeft;
+        designerTabs.SelectedIndex = 0;
+        designerTabs.Size = new Size(680, 512);
+        designerTabs.TabIndex = 0;
+        // 
+        // designerDefaultFilePage
+        // 
+        designerDefaultFilePage.Location = new Point(4, 26);
+        designerDefaultFilePage.Name = "designerDefaultFilePage";
+        designerDefaultFilePage.Size = new Size(672, 482);
+        designerDefaultFilePage.TabIndex = 0;
+        designerDefaultFilePage.Text = "Default File";
+        // 
+        // designerEnvironmentPage
+        // 
+        designerEnvironmentPage.Location = new Point(4, 26);
+        designerEnvironmentPage.Name = "designerEnvironmentPage";
+        designerEnvironmentPage.Size = new Size(192, 70);
+        designerEnvironmentPage.TabIndex = 1;
+        designerEnvironmentPage.Text = "Environment";
+        // 
+        // designerFoldersPage
+        // 
+        designerFoldersPage.Location = new Point(4, 26);
+        designerFoldersPage.Name = "designerFoldersPage";
+        designerFoldersPage.Size = new Size(192, 70);
+        designerFoldersPage.TabIndex = 2;
+        designerFoldersPage.Text = "Folders";
+        // 
+        // designerAlarmsPage
+        // 
+        designerAlarmsPage.Location = new Point(4, 26);
+        designerAlarmsPage.Name = "designerAlarmsPage";
+        designerAlarmsPage.Size = new Size(192, 70);
+        designerAlarmsPage.TabIndex = 3;
+        designerAlarmsPage.Text = "Alarms";
+        // 
+        // designerWebBrowsingPage
+        // 
+        designerWebBrowsingPage.Location = new Point(4, 26);
+        designerWebBrowsingPage.Name = "designerWebBrowsingPage";
+        designerWebBrowsingPage.Size = new Size(192, 70);
+        designerWebBrowsingPage.TabIndex = 4;
+        designerWebBrowsingPage.Text = "Web Browsing";
+        // 
+        // designerButtonPanel
+        // 
         designerButtonPanel.Controls.Add(designerHelpButton);
         designerButtonPanel.Controls.Add(designerCancelButton);
         designerButtonPanel.Controls.Add(designerOkButton);
-
+        designerButtonPanel.Dock = DockStyle.Bottom;
+        designerButtonPanel.FlowDirection = FlowDirection.RightToLeft;
+        designerButtonPanel.Location = new Point(0, 512);
+        designerButtonPanel.Name = "designerButtonPanel";
+        designerButtonPanel.Padding = new Padding(8);
+        designerButtonPanel.Size = new Size(680, 48);
+        designerButtonPanel.TabIndex = 1;
+        // 
+        // designerHelpButton
+        // 
+        designerHelpButton.Location = new Point(571, 11);
+        designerHelpButton.Name = "designerHelpButton";
+        designerHelpButton.Size = new Size(90, 23);
+        designerHelpButton.TabIndex = 0;
+        designerHelpButton.Text = "&Help";
+        // 
+        // designerCancelButton
+        // 
+        designerCancelButton.Location = new Point(475, 11);
+        designerCancelButton.Name = "designerCancelButton";
+        designerCancelButton.Size = new Size(90, 23);
+        designerCancelButton.TabIndex = 1;
+        designerCancelButton.Text = "Cancel";
+        // 
+        // designerOkButton
+        // 
+        designerOkButton.Location = new Point(379, 11);
+        designerOkButton.Name = "designerOkButton";
+        designerOkButton.Size = new Size(90, 23);
+        designerOkButton.TabIndex = 2;
+        designerOkButton.Text = "OK";
+        // 
+        // OrganizerPreferencesDialog
+        // 
         AutoScaleDimensions = new SizeF(7F, 15F);
         AutoScaleMode = AutoScaleMode.Font;
         ClientSize = new Size(680, 560);
-        FormBorderStyle = FormBorderStyle.FixedDialog;
-        MaximizeBox = false;
-        MinimizeBox = false;
-        Text = "Organizer Preferences";
         Controls.Add(designerTabs);
         Controls.Add(designerButtonPanel);
+        FormBorderStyle = FormBorderStyle.FixedDialog;
+        Icon = (Icon)resources.GetObject("$this.Icon");
+        MaximizeBox = false;
+        MinimizeBox = false;
+        Name = "OrganizerPreferencesDialog";
+        Text = "Organizer Preferences";
+        designerTabs.ResumeLayout(false);
+        designerButtonPanel.ResumeLayout(false);
+        ResumeLayout(false);
     }
 
     #endregion

@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 
 namespace Organizer;
 
@@ -63,7 +64,75 @@ internal sealed class CalendarPlannerView : Control
     protected override void OnMouseDown(MouseEventArgs e)
     {
         base.OnMouseDown(e);
-        SelectCalendarItemAt(e.Location);
+        bool hit = SelectCalendarItemAt(e.Location);
+
+        // When clicking empty area, update SelectedDate to the date under the click so external callers
+        // (for example, the main form Add flow) can rely on the planner's SelectedDate.
+        if(!hit)
+        {
+            DateTime? date = GetDateAt(e.Location);
+            if(date is not null)
+            {
+                SelectedDate = date.Value.Date;
+                Invalidate();
+            }
+        }
+    }
+
+    // Returns the calendar date corresponding to the supplied client point, or null when outside the calendar area.
+    private DateTime? GetDateAt(Point location)
+    {
+        Rectangle page = ClientRectangle;
+        page.Inflate(-4, -4);
+
+        if(page.Width <= 0 || page.Height <= 0) return null;
+
+        Rectangle content = Rectangle.Inflate(page, -8, -8);
+
+        switch(ViewMode)
+        {
+            case CalendarViewMode.Month:
+            {
+                Rectangle title = new(content.Left, content.Top, content.Width, 36);
+                Rectangle grid = new(content.Left, title.Bottom, content.Width, content.Height - title.Height);
+                const int dayHeaderHeight = 26;
+
+                DateTime first = new(SelectedDate.Year, SelectedDate.Month, 1);
+                DateTime firstVisible = StartOfWeek(first);
+                DateTime last = new(SelectedDate.Year, SelectedDate.Month, DateTime.DaysInMonth(SelectedDate.Year, SelectedDate.Month));
+                DateTime lastVisible = StartOfWeek(last).AddDays(6);
+                int weeks = Math.Max(1, (int)((lastVisible - firstVisible).TotalDays + 1) / 7);
+
+                if(location.Y < grid.Top + dayHeaderHeight || location.Y > grid.Bottom) return null;
+
+                int colWidth = grid.Width / 7;
+                int col = Math.Clamp((location.X - grid.Left) / (colWidth == 0 ? 1 : colWidth), 0, 6);
+                int rowHeight = Math.Max(1, (grid.Height - dayHeaderHeight) / weeks);
+                int row = Math.Clamp((location.Y - (grid.Top + dayHeaderHeight)) / (rowHeight == 0 ? 1 : rowHeight), 0, weeks - 1);
+
+                DateTime day = firstVisible.AddDays(row * 7 + col);
+                return day.Date;
+            }
+
+            case CalendarViewMode.Week:
+            {
+                Rectangle title = new(content.Left, content.Top, content.Width, 32);
+                Rectangle body = new(content.Left, title.Bottom, content.Width, content.Height - title.Height);
+                int dayCount = 7;
+                int columnWidth = Math.Max(1, (body.Width - TimeGutter) / dayCount);
+                int x = location.X - (body.Left + TimeGutter);
+                if(location.Y < body.Top || location.Y > body.Bottom) return null;
+                int dayIndex = Math.Clamp(x / columnWidth, 0, dayCount - 1);
+                DateTime start = StartOfWeek(SelectedDate);
+                return start.AddDays(dayIndex).Date;
+            }
+
+            default: // Day view
+            {
+                // Day view represents a single date
+                return SelectedDate.Date;
+            }
+        }
     }
 
     protected override void OnMouseDoubleClick(MouseEventArgs e)
@@ -91,18 +160,20 @@ internal sealed class CalendarPlannerView : Control
 
         using Pen? borderPen = new(Color.FromArgb(174, 139, 72));
         using Pen? lightPen = new(Color.FromArgb(226, 206, 154));
-        using SolidBrush? headerBrush = new (Color.FromArgb(244, 222, 163));
-        using SolidBrush? paperBrush = new (Color.FromArgb(255, 253, 239));
+        using SolidBrush? headerBrush = new(Color.FromArgb(244, 222, 163));
+        using SolidBrush? paperBrush = new(Color.FromArgb(255, 253, 239));
 
         Rectangle page = ClientRectangle;
-        page.Inflate(-10, -10);
+        // Reduce outer page padding so the calendar uses more available space
+        page.Inflate(-4, -4);
 
         if(page.Width <= 0 || page.Height <= 0) return;
 
         e.Graphics.FillRectangle(paperBrush, page);
         e.Graphics.DrawRectangle(borderPen, page);
 
-        Rectangle content = Rectangle.Inflate(page, -18, -16);
+        // Reduce content inset to expand the calendar drawing area
+        Rectangle content = Rectangle.Inflate(page, -8, -8);
 
         switch(ViewMode)
         {
@@ -195,12 +266,19 @@ internal sealed class CalendarPlannerView : Control
 
         Rectangle grid = new(bounds.Left, title.Bottom, bounds.Width, bounds.Height - title.Height);
         const int dayHeaderHeight = 26;
-        string[]? dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+        CultureInfo? culture = CultureInfo.CurrentCulture;
+        string[]? dayNames = Enumerable.Range(0, 7)
+            .Select(i => culture.DateTimeFormat.AbbreviatedDayNames[((int)WeekStarts + i) % 7])
+            .ToArray();
         int colWidth = grid.Width / 7;
+
+        // Month grid geometry computed
 
         for(int column = 0; column < 7; column++)
         {
-            Rectangle header = new(grid.Left + column * colWidth, grid.Top, column == 6 ? grid.Right - (grid.Left + column * colWidth) : colWidth, dayHeaderHeight);
+            int headerX = grid.Left + column * colWidth;
+            int headerWidth = column == 6 ? grid.Right - headerX : colWidth;
+            Rectangle header = new(headerX, grid.Top, headerWidth, dayHeaderHeight);
 
             graphics.FillRectangle(headerBrush, header);
             graphics.DrawRectangle(borderPen, header);
@@ -209,19 +287,22 @@ internal sealed class CalendarPlannerView : Control
 
         DateTime first = new(SelectedDate.Year, SelectedDate.Month, 1);
         DateTime firstVisible = StartOfWeek(first);
+        DateTime last = new(SelectedDate.Year, SelectedDate.Month, DateTime.DaysInMonth(SelectedDate.Year, SelectedDate.Month));
+        DateTime lastVisible = StartOfWeek(last).AddDays(6);
+        int weeks = Math.Max(1, (int)((lastVisible - firstVisible).TotalDays + 1) / 7);
         int cellTop = grid.Top + dayHeaderHeight;
-        int rowHeight = Math.Max(1, (grid.Height - dayHeaderHeight) / 6);
+        int rowHeight = Math.Max(1, (grid.Height - dayHeaderHeight) / weeks);
 
-        for(int row = 0; row < 6; row++)
+        for(int row = 0; row < weeks; row++)
         {
             for(int column = 0; column < 7; column++)
             {
                 DateTime day = firstVisible.AddDays(row * 7 + column);
                 int x = grid.Left + column * colWidth;
-                Rectangle cell = new (x, cellTop + row * rowHeight, column == 6 ? grid.Right - x : colWidth, row == 5 ? grid.Bottom - (cellTop + row * rowHeight) : rowHeight);
+                Rectangle cell = new(x, cellTop + row * rowHeight, column == 6 ? grid.Right - x : colWidth, row == weeks - 1 ? grid.Bottom - (cellTop + row * rowHeight) : rowHeight);
                 bool inMonth = day.Month == SelectedDate.Month;
 
-                using SolidBrush? cellBrush = new (day.Date == SelectedDate.Date ? Color.FromArgb(255, 241, 180) : inMonth ? Color.FromArgb(255, 253, 239) : Color.FromArgb(239, 232, 211));
+                using SolidBrush? cellBrush = new(day.Date == SelectedDate.Date ? Color.FromArgb(255, 241, 180) : inMonth ? Color.FromArgb(255, 253, 239) : Color.FromArgb(239, 232, 211));
                 graphics.FillRectangle(cellBrush, cell);
                 graphics.DrawRectangle(lightPen, cell);
 
@@ -233,15 +314,15 @@ internal sealed class CalendarPlannerView : Control
 
                 foreach(OrganizerTask task in tasks)
                 {
-                    Rectangle taskRect = new (cell.Left + 4, y, cell.Width - 8, 18);
+                    Rectangle taskRect = new(cell.Left + 4, y, cell.Width - 8, 18);
 
                     DrawTaskBlock(graphics, taskRect, task);
                     y += 20;
                 }
 
-                foreach(var calendarEvent in events)
+                foreach(CalendarEvent calendarEvent in events)
                 {
-                    Rectangle eventRect = new (cell.Left + 4, y, cell.Width - 8, 18);
+                    Rectangle eventRect = new(cell.Left + 4, y, cell.Width - 8, 18);
 
                     DrawEventBlock(graphics, eventRect, calendarEvent, $"{calendarEvent.Start:h:mm} {calendarEvent.Title}");
                     y += 20;
@@ -254,13 +335,14 @@ internal sealed class CalendarPlannerView : Control
 
     private void DrawTimeGrid(Graphics graphics, Rectangle body, int dayCount, DateTime[] days, Pen lightPen, Pen borderPen)
     {
-        Rectangle timeline = new(body.Left, body.Top + DayHeaderHeight, body.Width, body.Height - DayHeaderHeight);
+        //Rectangle timeline = new(body.Left, body.Top + DayHeaderHeight, body.Width, body.Height - DayHeaderHeight);
         int columnWidth = Math.Max(1, (body.Width - TimeGutter) / dayCount);
 
         graphics.DrawRectangle(borderPen, new Rectangle(body.Left, body.Top, body.Width - 1, DayHeaderHeight - 1));
         using SolidBrush? headerBrush = new(Color.FromArgb(248, 231, 183));
         graphics.FillRectangle(headerBrush, new Rectangle(body.Left, body.Top, body.Width, DayHeaderHeight));
 
+        // Grid and column geometry computed
         for(int dayIndex = 0; dayIndex < dayCount; dayIndex++)
         {
             int x = body.Left + TimeGutter + dayIndex * columnWidth;
@@ -291,7 +373,7 @@ internal sealed class CalendarPlannerView : Control
                 if(y >= timeline.Bottom - 4) break;
 
                 int height = Math.Min(24, Math.Max(20, timeline.Bottom - y - 4));
-                Rectangle taskRect = new (x, y, Math.Max(20, width), height);
+                Rectangle taskRect = new(x, y, Math.Max(20, width), height);
 
                 DrawTaskBlock(graphics, taskRect, task);
                 y += height + 4;
@@ -336,8 +418,8 @@ internal sealed class CalendarPlannerView : Control
 
     private static void DrawPencilInIcon(Graphics graphics, Rectangle bounds, bool selected)
     {
-        using Pen? pencil = new (selected ? Color.White : Color.FromArgb(155, 111, 0), 2f);
-        using Pen? outline = new (selected ? Color.FromArgb(230, 230, 230) : Color.FromArgb(72, 48, 24));
+        using Pen? pencil = new(selected ? Color.White : Color.FromArgb(155, 111, 0), 2f);
+        using Pen? outline = new(selected ? Color.FromArgb(230, 230, 230) : Color.FromArgb(72, 48, 24));
         graphics.DrawLine(pencil, bounds.Left + 2, bounds.Bottom - 3, bounds.Right - 3, bounds.Top + 2);
         graphics.DrawLine(outline, bounds.Left + 1, bounds.Bottom - 2, bounds.Right - 2, bounds.Top + 1);
         graphics.FillPolygon(
@@ -350,8 +432,8 @@ internal sealed class CalendarPlannerView : Control
         if(bounds.Width <= 0 || bounds.Height <= 0) return;
 
         bool selected = ReferenceEquals(task, _selectedTask);
-        using SolidBrush? fill = new (selected ? Color.FromArgb(91, 139, 74) : task.Completed ? Color.FromArgb(220, 226, 205) : Color.FromArgb(218, 238, 196));
-        using Pen? border = new (selected ? Color.FromArgb(42, 89, 35) : Color.FromArgb(95, 137, 67));
+        using SolidBrush? fill = new(selected ? Color.FromArgb(91, 139, 74) : task.Completed ? Color.FromArgb(220, 226, 205) : Color.FromArgb(218, 238, 196));
+        using Pen? border = new(selected ? Color.FromArgb(42, 89, 35) : Color.FromArgb(95, 137, 67));
         graphics.FillRectangle(fill, bounds);
         graphics.DrawRectangle(border, bounds);
         _taskBounds[bounds] = task;
@@ -428,9 +510,13 @@ internal sealed class CalendarPlannerView : Control
         return years >= 0 && years % task.RepeatEvery == 0 && task.DueDate.AddYears(years).Date == date.Date;
     }
 
-    private static DateTime StartOfWeek(DateTime date)
+    // Week start can be changed by the host (MainForm) to respect user preferences.
+    [DefaultValue(DayOfWeek.Sunday)]
+    public DayOfWeek WeekStarts { get; set; } = DayOfWeek.Sunday;
+
+    private DateTime StartOfWeek(DateTime date)
     {
-        int diff = (7 + (date.DayOfWeek - DayOfWeek.Sunday)) % 7;
+        int diff = (7 + (date.DayOfWeek - WeekStarts)) % 7;
 
         return date.Date.AddDays(-diff);
     }

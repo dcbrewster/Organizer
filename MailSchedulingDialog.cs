@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 namespace Organizer;
 
-public sealed class MailSchedulingDialog : Form
+public sealed class MailSchedulingDialog : DialogBase
 {
     private TabControl _tabs = new();
 
@@ -62,6 +62,9 @@ public sealed class MailSchedulingDialog : Form
     public MailSchedulingDialog()
     {
         Text = "Mail and Scheduling Preferences";
+        // Dialog behavior: do not show icon or appear in the taskbar
+        ShowInTaskbar = false;
+        ShowIcon = false;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(520, 420);

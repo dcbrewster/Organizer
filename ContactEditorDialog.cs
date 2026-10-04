@@ -2,7 +2,7 @@ using System.Reflection;
 
 namespace Organizer;
 
-internal sealed class ContactEditorDialog : Form
+internal sealed class ContactEditorDialog : DialogBase
 {
     private readonly object _record;
     private readonly PropertyInfo? _propName;
@@ -23,6 +23,9 @@ internal sealed class ContactEditorDialog : Form
         _record = record ?? throw new ArgumentNullException(nameof(record));
         Text = title ?? "Edit Contact";
         StartPosition = FormStartPosition.CenterParent;
+        // Dialogs should not show icons or appear in the taskbar; only the main form shows in the taskbar
+        ShowInTaskbar = false;
+        ShowIcon = false;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
@@ -653,7 +656,6 @@ internal sealed class ContactEditorDialog : Form
             catch(Exception ex)
             {
                 anySetFailed = true;
-                System.Diagnostics.Debug.WriteLine($"SetIfWritable failed for {propName}: {ex.Message}");
 
                 return false;
             }
@@ -676,7 +678,6 @@ internal sealed class ContactEditorDialog : Form
             catch(Exception ex)
             {
                 anySetFailed = true;
-                System.Diagnostics.Debug.WriteLine($"Name set failed: {ex.Message}");
             }
 
             anySetFailed |= !SetIfWritable("Title", cmbTitle.Text);
@@ -740,7 +741,6 @@ internal sealed class ContactEditorDialog : Form
         catch(Exception ex)
         {
             anySetFailed = true;
-            System.Diagnostics.Debug.WriteLine($"Unexpected error persisting fields: {ex.Message}");
         }
 
         if(anySetFailed)

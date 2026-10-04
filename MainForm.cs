@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Drawing;
 using System.Drawing.Printing;
 using System.Text;
 using Organizer.About;
@@ -14,11 +13,29 @@ public sealed partial class MainForm : Form
     private readonly Dictionary<string, BindingSource> _sectionSources = [];
     private TabControl _tabs = null!;
     private CalendarPlannerView? _planner;
+
     // Binder panel collapse state
     private int _binderPanelLastWidth = 260;
+
     private bool _binderPanelCollapsed = false;
+
     // Reference to the View menu item so we can update its text when toggling
     private ToolStripMenuItem? _collapseBinderPanelMenuItem;
+
+    // Small clickable label placed above the calendar to toggle the binder panel
+    private Label? _binderToggleLabel;
+
+    // Stores original visibility of left-panel child controls when collapsed so we can restore on expand
+    private Dictionary<Control, bool>? _leftPanelChildVisibility;
+
+    // Animation for collapsing/expanding the left binder panel
+    private System.Windows.Forms.Timer? _binderAnimationTimer;
+
+    private int _binderAnimationTargetWidth = 0;
+    private bool _binderAnimationExpanding = false;
+
+    // Shared tooltip for small UI elements
+    private ToolTip? _toolTip;
 
     // Drag/drop support for tab reordering
     private int _dragTabIndex = -1;
@@ -49,6 +66,119 @@ public sealed partial class MainForm : Form
 
         return DayOfWeek.Sunday;
     }
+
+    private void StartBinderAnimation(int targetWidth, bool expanding)
+    {
+        try
+        {
+            // Initialize timer if needed
+            if(_binderAnimationTimer is null)
+            {
+                _binderAnimationTimer = new System.Windows.Forms.Timer { Interval = 15 };
+                _binderAnimationTimer.Tick += (_, _) =>
+                {
+                    try
+                    {
+                        if(designerCalendarLeftPanel is null) return;
+
+                        int current = designerCalendarLeftPanel.Width;
+                        int target = _binderAnimationTargetWidth;
+
+                        if(current == target)
+                        {
+                            _binderAnimationTimer?.Stop();
+                            _binderAnimationAnimating = false;
+
+                            // Finalize state
+                            if(_binderAnimationExpanding)
+                            {
+                                // Restore children visibility
+                                try
+                                {
+                                    if(_leftPanelChildVisibility is not null)
+                                    {
+                                        foreach(var kvp in _leftPanelChildVisibility)
+                                        {
+                                            try { if(kvp.Key is not null) kvp.Key.Visible = kvp.Value; } catch { }
+                                        }
+
+                                        _leftPanelChildVisibility = null;
+                                    }
+                                    else
+                                    {
+                                        foreach(Control c in designerCalendarLeftPanel.Controls)
+                                        {
+                                            if(object.ReferenceEquals(c, _binderToggleLabel)) continue;
+                                            c.Visible = true;
+                                        }
+                                    }
+                                }
+                                catch { }
+
+                                // Restore min size
+                                try { designerCalendarLeftPanel.MinimumSize = new Size(_binderPanelLastWidth > 0 ? _binderPanelLastWidth : 260, 0); } catch { }
+                                _binderPanelCollapsed = false;
+                            }
+                            else
+                            {
+                                // Collapsed: ensure only glyph remains visible
+                                try
+                                {
+                                    foreach(Control c in designerCalendarLeftPanel.Controls)
+                                    {
+                                        if(object.ReferenceEquals(c, _binderToggleLabel)) { c.Visible = true; continue; }
+                                        c.Visible = false;
+                                    }
+                                }
+                                catch { }
+
+                                // Tighten minimum size to the glyph width
+                                try { if(_binderToggleLabel is not null) designerCalendarLeftPanel.MinimumSize = new Size(Math.Max(24, _binderToggleLabel.Width + 8), 0); } catch { }
+                                _binderPanelCollapsed = true;
+                            }
+
+                            // Update view/menu/glyph after animation finishes
+                            try
+                            {
+                                if(_collapseBinderPanelMenuItem is not null) _collapseBinderPanelMenuItem.Text = _binderPanelCollapsed ? "Expand Binder Panel\tF12" : "Collapse Binder Panel\tF12";
+                                if(_binderToggleLabel is not null) _binderToggleLabel.Text = _binderPanelCollapsed ? "\u25B6" : "\u25BC";
+                            }
+                            catch { }
+
+                            designerCalendarLeftPanel.Parent?.PerformLayout();
+                            _tabs.Parent?.PerformLayout();
+                            _tabs.Invalidate();
+
+                            return;
+                        }
+
+                        // Move towards target using an easing step
+                        int diff = target - current;
+                        int step = Math.Max(1, Math.Abs(diff) / 6);
+                        int next = current + Math.Sign(diff) * step;
+                        // Clamp to target
+                        if((diff > 0 && next > target) || (diff < 0 && next < target)) next = target;
+
+                        try { designerCalendarLeftPanel.Width = next; } catch { }
+                    }
+                    catch { }
+                };
+            }
+
+            _binderAnimationTargetWidth = targetWidth;
+            _binderAnimationExpanding = expanding;
+            _binderAnimationAnimating = true;
+
+            // Ensure layout does not prevent the animation: relax minimum size before animating
+            try { designerCalendarLeftPanel.MinimumSize = new Size(0, 0); } catch { }
+
+            _binderAnimationTimer.Start();
+        }
+        catch { }
+    }
+
+    // Tracks active animation
+    private bool _binderAnimationAnimating = false;
 
     private static System.Windows.Forms.Day ConvertToWinFormsDay(DayOfWeek dow)
     {
@@ -170,6 +300,7 @@ public sealed partial class MainForm : Form
                 _tabs.Invalidate();
             }
             catch { }
+            // Note: glyph and runtime tooltips are created in BuildCalendarTab after the left panel is populated
         }
         catch { }
 
@@ -262,16 +393,37 @@ public sealed partial class MainForm : Form
 
         if(!_binderPanelCollapsed)
         {
-            // Save current width then hide
+            // Start collapse: save width, hide children (except glyph), and animate to glyph-only width
             _binderPanelLastWidth = designerCalendarLeftPanel.Width > 0 ? designerCalendarLeftPanel.Width : _binderPanelLastWidth;
-            designerCalendarLeftPanel.Visible = false;
-            _binderPanelCollapsed = true;
+
+            try
+            {
+                // Record current visibility for later restore but don't hide them immediately; hiding will occur when animation completes to avoid layout side-effects.
+                _leftPanelChildVisibility = new Dictionary<Control, bool>();
+                foreach(Control c in designerCalendarLeftPanel.Controls)
+                {
+                    if(object.ReferenceEquals(c, _binderToggleLabel))
+                    {
+                        // ensure glyph remains visible
+                        _leftPanelChildVisibility[c] = true;
+                        continue;
+                    }
+
+                    _leftPanelChildVisibility[c] = c.Visible;
+                }
+
+                int glyphWidth = 24;
+                try { if(_binderToggleLabel is not null && _binderToggleLabel.PreferredSize.Width > 0) glyphWidth = Math.Max(24, _binderToggleLabel.PreferredSize.Width + 8); } catch { }
+
+                StartBinderAnimation(glyphWidth, expanding: false);
+            }
+            catch { }
         }
         else
         {
-            designerCalendarLeftPanel.Width = _binderPanelLastWidth > 0 ? _binderPanelLastWidth : 260;
-            designerCalendarLeftPanel.Visible = true;
-            _binderPanelCollapsed = false;
+            // Start expand: animate back to saved width, will restore children at end
+            int restoreWidth = _binderPanelLastWidth > 0 ? _binderPanelLastWidth : 260;
+            StartBinderAnimation(restoreWidth, expanding: true);
         }
 
         // Force layout update so the tab control fills the available space
@@ -279,11 +431,7 @@ public sealed partial class MainForm : Form
         _tabs.Parent?.PerformLayout();
         _tabs.Invalidate();
 
-        // Update View menu text to reflect current action
-        if(_collapseBinderPanelMenuItem is not null)
-        {
-            _collapseBinderPanelMenuItem.Text = _binderPanelCollapsed ? "Expand Binder Panel\tF12" : "Collapse Binder Panel\tF12";
-        }
+        // Menu/glyph will be updated when the animation completes
     }
 
     private void LogLeftPanelLayout(string reason)
@@ -295,7 +443,6 @@ public sealed partial class MainForm : Form
 
             if(left is null || month is null)
             {
-                System.Diagnostics.Debug.WriteLine($"LogLeftPanelLayout({reason}): left or month null");
                 return;
             }
 
@@ -305,11 +452,11 @@ public sealed partial class MainForm : Form
             Rectangle monthClient = month.ClientRectangle;
             bool leftVisible = left.Visible;
 
-            System.Diagnostics.Debug.WriteLine($"LogLeftPanelLayout({reason}): left.Visible={leftVisible}, left.Bounds={leftBounds}, left.Client={leftClient}, month.Bounds={monthBounds}, month.Client={monthClient}");
+            // left panel layout: left.Visible={leftVisible}, left.Bounds={leftBounds}, left.Client={leftClient}, month.Bounds={monthBounds}, month.Client={monthClient}
         }
         catch(Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"LogLeftPanelLayout({reason}) failed: {ex.Message}");
+            // Swallow layout logging exceptions
         }
     }
 
@@ -789,6 +936,7 @@ public sealed partial class MainForm : Form
         if(command.Equals("About Organizer", StringComparison.OrdinalIgnoreCase))
         {
             aboutToolStripMenuItem_Click(this, EventArgs.Empty);
+
             return;
         }
 
@@ -1349,8 +1497,12 @@ public sealed partial class MainForm : Form
     private void ShowAlarms()
     {
         DateTime today = DateTime.Today;
-        IEnumerable<string>? upcomingEvents = _data.Events.Where(item => item.Start >= DateTime.Now && item.Start < today.AddDays(7)).OrderBy(item => item.Start).Select(item => $"Appointment: {item.Start:g} {item.Title}");
-        IEnumerable<string>? dueTasks = _data.Tasks.Where(item => !item.Completed && item.DueDate.Date <= today.AddDays(7)).OrderBy(item => item.DueDate).Select(item => $"To Do: {item.DueDate:g} {item.Title}");
+        IEnumerable<string>? upcomingEvents = _data.Events.Where(item => item.Start >= DateTime.Now && item.Start < today.AddDays(7))
+            .OrderBy(item => item.Start)
+            .Select(item => $"Appointment: {item.Start:g} {item.Title}");
+        IEnumerable<string>? dueTasks = _data.Tasks.Where(item => !item.Completed && item.DueDate.Date <= today.AddDays(7))
+            .OrderBy(item => item.DueDate)
+            .Select(item => $"To Do: {item.DueDate:g} {item.Title}");
         IEnumerable<string>? lines = upcomingEvents.Concat(dueTasks).DefaultIfEmpty("No upcoming alarms.");
 
         MessageBox.Show(this, string.Join(Environment.NewLine, lines), "Alarms", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -1546,6 +1698,8 @@ public sealed partial class MainForm : Form
             try { planner.WeekStarts = ParseWeekStarts(_data); } catch { planner.WeekStarts = DayOfWeek.Sunday; }
             planner.SelectedDate = plannerDate;
             planner.ViewMode = viewMode;
+            // Keep the left-panel month calendar in sync with the planner's current date
+            try { monthCalendar.SetDate(plannerDate); } catch { try { monthCalendar.SelectionStart = plannerDate; } catch { } }
             // Populate events/tasks for the planner (convert to arrays for IReadOnlyList)
             planner.Events = GetCalendarEvents(plannerDate, viewMode).ToArray();
             planner.Tasks = GetCalendarTasks(plannerDate, viewMode).ToArray();
@@ -1649,7 +1803,8 @@ public sealed partial class MainForm : Form
 
         addButton.Click += (_, _) =>
         {
-            DateTime date = monthCalendar.SelectionStart.Date;
+            // Prefer the planner's selected date (right-side calendar) when available, otherwise fall back to the left MonthCalendar selection
+            DateTime date = planner is not null ? planner.SelectedDate.Date : monthCalendar.SelectionStart.Date;
             CalendarEvent? calendarEvent = new() { Start = date.AddHours(9), End = date.AddHours(10) };
 
             if(CreateAppointmentDialog.Edit(this, calendarEvent, "Create Appointment", _data.Events))
@@ -1672,7 +1827,14 @@ public sealed partial class MainForm : Form
             RefreshCalendar();
         };
 
-        FlowLayoutPanel? buttonPanel = new() { Dock = DockStyle.Top, Height = 48, Padding = new Padding(8), FlowDirection = FlowDirection.LeftToRight, BackColor = Color.FromArgb(199, 156, 75) };
+        FlowLayoutPanel? buttonPanel = new()
+        {
+            Dock = DockStyle.Top,
+            Height = 48,
+            Padding = new Padding(8),
+            FlowDirection = FlowDirection.LeftToRight,
+            BackColor = Color.FromArgb(199, 156, 75)
+        };
 
         buttonPanel.Controls.AddRange([previousButton, nextButton]);
 
@@ -1685,6 +1847,41 @@ public sealed partial class MainForm : Form
         designerCalendarLeftPanel.Width = preferred.Width + 20; // 20px wider as requested
         monthCalendar.Dock = DockStyle.Top;
         designerCalendarLeftPanel.Controls.Add(buttonPanel);
+
+        // Ensure the binder toggle glyph is part of the left panel and placed above the month calendar
+        try
+        {
+            if(_binderToggleLabel is null)
+            {
+                _binderToggleLabel = new Label
+                {
+                    Text = _binderPanelCollapsed ? "\u25B6" : "\u25BC",
+                    Dock = DockStyle.Top,
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    Height = 24,
+                    Cursor = Cursors.Hand,
+                    BackColor = Color.Transparent,
+                    Padding = Padding.Empty,
+                    Margin = Padding.Empty,
+                    Font = new Font(SystemFonts.DefaultFont.FontFamily, SystemFonts.DefaultFont.SizeInPoints + 1.5f, FontStyle.Bold),
+                };
+
+                _binderToggleLabel.Click += (_, _) => ExecuteCommand("Collapse Binder Panel");
+            }
+
+            // Remove from any previous parent before re-adding
+            try
+            {
+                _binderToggleLabel.Parent?.Controls.Remove(_binderToggleLabel);
+            }
+            catch { }
+
+            // Add the glyph before the month calendar so it appears above it
+            designerCalendarLeftPanel.Controls.Add(_binderToggleLabel);
+            // We'll set child index after adding monthCalendar below if needed
+        }
+        catch { }
+
         designerCalendarLeftPanel.Controls.Add(monthCalendar);
 
         // Add clipboard and trash icons into an icons panel at the bottom of the left panel
@@ -1696,6 +1893,16 @@ public sealed partial class MainForm : Form
         if(trashTarget is not null) iconsPanel.Controls.Add(trashTarget);
 
         designerCalendarLeftPanel.Controls.Add(iconsPanel);
+
+        // Attach tooltips to the runtime navigation buttons and the glyph
+        try
+        {
+            if(_toolTip is null) _toolTip = new ToolTip { AutoPopDelay = 5000, InitialDelay = 300, ReshowDelay = 100, ShowAlways = true };
+            try { if(previousButton is not null) _toolTip.SetToolTip(previousButton, "Previous"); } catch { }
+            try { if(nextButton is not null) _toolTip.SetToolTip(nextButton, "Next"); } catch { }
+            try { if(_binderToggleLabel is not null) _toolTip.SetToolTip(_binderToggleLabel, "Collapse/Expand binder panel"); } catch { }
+        }
+        catch { }
 
         Panel rightPanel = new() { Dock = DockStyle.Fill, Padding = new Padding(8), BackColor = Color.FromArgb(178, 134, 61) };
 
@@ -1723,10 +1930,19 @@ public sealed partial class MainForm : Form
     {
         return viewMode switch
         {
-            CalendarViewMode.Day => _data.Tasks.Where(task => TaskOccursInRange(task, selectedDate.Date, selectedDate.Date.AddDays(1))).OrderBy(TaskPriority).ThenBy(task => task.Completed).ThenBy(task => task.Title),
-            CalendarViewMode.Week => _data.Tasks.Where(task => TaskOccursInRange(task, StartOfWeek(selectedDate), StartOfWeek(selectedDate).AddDays(7))).OrderBy(TaskPriority).ThenBy(task => task.Completed).ThenBy(task => task.Title),
-            CalendarViewMode.Month => _data.Tasks.Where(task => TaskOccursInRange(task, new DateTime(selectedDate.Year, selectedDate.Month, 1), new DateTime(selectedDate.Year, selectedDate.Month, 1).AddMonths(1))).OrderBy(TaskPriority).ThenBy(task => task.Completed).ThenBy(task => task.Title),
-            _ => _data.Tasks.OrderBy(TaskPriority).ThenBy(task => task.Completed).ThenBy(task => task.Title)
+            CalendarViewMode.Day => _data.Tasks.Where(task => TaskOccursInRange(task, selectedDate.Date, selectedDate.Date.AddDays(1)))
+            .OrderBy(TaskPriority)
+            .ThenBy(task => task.Completed).ThenBy(task => task.Title),
+            CalendarViewMode.Week => _data.Tasks.Where(task => TaskOccursInRange(task, StartOfWeek(selectedDate), StartOfWeek(selectedDate)
+            .AddDays(7))).OrderBy(TaskPriority)
+            .ThenBy(task => task.Completed)
+            .ThenBy(task => task.Title),
+            CalendarViewMode.Month => _data.Tasks.Where(task => TaskOccursInRange(task, new DateTime(selectedDate.Year, selectedDate.Month, 1), new DateTime(selectedDate.Year, selectedDate.Month, 1)
+            .AddMonths(1)))
+            .OrderBy(TaskPriority).ThenBy(task => task.Completed).ThenBy(task => task.Title),
+            _ => _data.Tasks.OrderBy(TaskPriority)
+            .ThenBy(task => task.Completed)
+            .ThenBy(task => task.Title)
         };
     }
 
@@ -1998,24 +2214,29 @@ public sealed partial class MainForm : Form
             tree.BeginUpdate();
             tree.Nodes.Clear();
 
-            var headings = _data.Notes
+            List<Note>? headings = _data.Notes
                 .Where(note => note.IsChapterHeading)
                 .OrderBy(note => note.SortOrder)
                 .ThenBy(note => note.Title)
                 .ToList();
 
-            foreach(var heading in headings)
+            foreach(Note heading in headings)
             {
-                var headingNode = CreateNoteNode(heading);
+                TreeNode? headingNode = CreateNoteNode(heading);
+
                 tree.Nodes.Add(headingNode);
 
-                foreach(var child in _data.Notes.Where(note => !note.IsChapterHeading && note.ParentHeadingId == heading.Id).OrderBy(note => note.SortOrder).ThenBy(note => note.Title))
+                foreach(Note child in _data.Notes.Where(note => !note.IsChapterHeading && note.ParentHeadingId == heading.Id)
+                    .OrderBy(note => note.SortOrder)
+                    .ThenBy(note => note.Title))
                 {
                     headingNode.Nodes.Add(CreateNoteNode(child));
                 }
             }
 
-            foreach(var note in _data.Notes.Where(note => !note.IsChapterHeading && note.ParentHeadingId is null).OrderBy(note => note.SortOrder).ThenBy(note => note.Title))
+            foreach(Note note in _data.Notes.Where(note => !note.IsChapterHeading && note.ParentHeadingId is null)
+                .OrderBy(note => note.SortOrder)
+                .ThenBy(note => note.Title))
             {
                 tree.Nodes.Add(CreateNoteNode(note));
             }

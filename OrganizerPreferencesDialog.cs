@@ -2,7 +2,7 @@ using System.ComponentModel;
 
 namespace Organizer;
 
-public sealed partial class OrganizerPreferencesDialog : Form
+public sealed partial class OrganizerPreferencesDialog : DialogBase
 {
     private readonly OrganizerPreferences _preferences;
     private readonly ComboBox _webBrowser = DropDown(["System default", "Internet Explorer", "Netscape Navigator", "Other"]);
@@ -44,6 +44,9 @@ public sealed partial class OrganizerPreferencesDialog : Form
         Controls.Clear();
 
         Text = "Organizer Preferences";
+        // Dialogs should not show an icon or appear in the taskbar
+        ShowInTaskbar = false;
+        ShowIcon = false;
         Width = 680;
         Height = 560;
         StartPosition = FormStartPosition.CenterParent;

@@ -64,7 +64,75 @@ internal sealed class CalendarPlannerView : Control
     protected override void OnMouseDown(MouseEventArgs e)
     {
         base.OnMouseDown(e);
-        SelectCalendarItemAt(e.Location);
+        bool hit = SelectCalendarItemAt(e.Location);
+
+        // When clicking empty area, update SelectedDate to the date under the click so external callers
+        // (for example, the main form Add flow) can rely on the planner's SelectedDate.
+        if(!hit)
+        {
+            DateTime? date = GetDateAt(e.Location);
+            if(date is not null)
+            {
+                SelectedDate = date.Value.Date;
+                Invalidate();
+            }
+        }
+    }
+
+    // Returns the calendar date corresponding to the supplied client point, or null when outside the calendar area.
+    private DateTime? GetDateAt(Point location)
+    {
+        Rectangle page = ClientRectangle;
+        page.Inflate(-4, -4);
+
+        if(page.Width <= 0 || page.Height <= 0) return null;
+
+        Rectangle content = Rectangle.Inflate(page, -8, -8);
+
+        switch(ViewMode)
+        {
+            case CalendarViewMode.Month:
+            {
+                Rectangle title = new(content.Left, content.Top, content.Width, 36);
+                Rectangle grid = new(content.Left, title.Bottom, content.Width, content.Height - title.Height);
+                const int dayHeaderHeight = 26;
+
+                DateTime first = new(SelectedDate.Year, SelectedDate.Month, 1);
+                DateTime firstVisible = StartOfWeek(first);
+                DateTime last = new(SelectedDate.Year, SelectedDate.Month, DateTime.DaysInMonth(SelectedDate.Year, SelectedDate.Month));
+                DateTime lastVisible = StartOfWeek(last).AddDays(6);
+                int weeks = Math.Max(1, (int)((lastVisible - firstVisible).TotalDays + 1) / 7);
+
+                if(location.Y < grid.Top + dayHeaderHeight || location.Y > grid.Bottom) return null;
+
+                int colWidth = grid.Width / 7;
+                int col = Math.Clamp((location.X - grid.Left) / (colWidth == 0 ? 1 : colWidth), 0, 6);
+                int rowHeight = Math.Max(1, (grid.Height - dayHeaderHeight) / weeks);
+                int row = Math.Clamp((location.Y - (grid.Top + dayHeaderHeight)) / (rowHeight == 0 ? 1 : rowHeight), 0, weeks - 1);
+
+                DateTime day = firstVisible.AddDays(row * 7 + col);
+                return day.Date;
+            }
+
+            case CalendarViewMode.Week:
+            {
+                Rectangle title = new(content.Left, content.Top, content.Width, 32);
+                Rectangle body = new(content.Left, title.Bottom, content.Width, content.Height - title.Height);
+                int dayCount = 7;
+                int columnWidth = Math.Max(1, (body.Width - TimeGutter) / dayCount);
+                int x = location.X - (body.Left + TimeGutter);
+                if(location.Y < body.Top || location.Y > body.Bottom) return null;
+                int dayIndex = Math.Clamp(x / columnWidth, 0, dayCount - 1);
+                DateTime start = StartOfWeek(SelectedDate);
+                return start.AddDays(dayIndex).Date;
+            }
+
+            default: // Day view
+            {
+                // Day view represents a single date
+                return SelectedDate.Date;
+            }
+        }
     }
 
     protected override void OnMouseDoubleClick(MouseEventArgs e)
@@ -96,14 +164,16 @@ internal sealed class CalendarPlannerView : Control
         using SolidBrush? paperBrush = new(Color.FromArgb(255, 253, 239));
 
         Rectangle page = ClientRectangle;
-        page.Inflate(-10, -10);
+        // Reduce outer page padding so the calendar uses more available space
+        page.Inflate(-4, -4);
 
         if(page.Width <= 0 || page.Height <= 0) return;
 
         e.Graphics.FillRectangle(paperBrush, page);
         e.Graphics.DrawRectangle(borderPen, page);
 
-        Rectangle content = Rectangle.Inflate(page, -18, -16);
+        // Reduce content inset to expand the calendar drawing area
+        Rectangle content = Rectangle.Inflate(page, -8, -8);
 
         switch(ViewMode)
         {
@@ -202,14 +272,12 @@ internal sealed class CalendarPlannerView : Control
             .ToArray();
         int colWidth = grid.Width / 7;
 
-        // Diagnostic: log month grid geometry to help detect clipped final column
-        System.Diagnostics.Debug.WriteLine($"DrawMonth: grid=({grid.Left},{grid.Top},{grid.Width},{grid.Height}), colWidth={colWidth}, grid.Right={grid.Right}");
+        // Month grid geometry computed
 
         for(int column = 0; column < 7; column++)
         {
             int headerX = grid.Left + column * colWidth;
             int headerWidth = column == 6 ? grid.Right - headerX : colWidth;
-            System.Diagnostics.Debug.WriteLine($" DrawMonth column={column}: headerX={headerX}, headerWidth={headerWidth}, headerRight={headerX+headerWidth}");
             Rectangle header = new(headerX, grid.Top, headerWidth, dayHeaderHeight);
 
             graphics.FillRectangle(headerBrush, header);
@@ -274,13 +342,11 @@ internal sealed class CalendarPlannerView : Control
         using SolidBrush? headerBrush = new(Color.FromArgb(248, 231, 183));
         graphics.FillRectangle(headerBrush, new Rectangle(body.Left, body.Top, body.Width, DayHeaderHeight));
 
-        // Unconditional diagnostic logging of the grid and column geometry to help find hidden column issues
-        System.Diagnostics.Debug.WriteLine($"DrawTimeGrid: body=({body.Left},{body.Top},{body.Width},{body.Height}), dayCount={dayCount}, columnWidth={columnWidth}, TimeGutter={TimeGutter}, DayHeaderHeight={DayHeaderHeight}");
+        // Grid and column geometry computed
         for(int dayIndex = 0; dayIndex < dayCount; dayIndex++)
         {
             int x = body.Left + TimeGutter + dayIndex * columnWidth;
             int width = dayIndex == dayCount - 1 ? body.Right - x : columnWidth;
-            System.Diagnostics.Debug.WriteLine($" dayIndex={dayIndex}: x={x}, width={width}, headerRight={x+width}, bodyRight={body.Right}");
             Rectangle header = new(x, body.Top, width, DayHeaderHeight);
 
             TextRenderer.DrawText(graphics, dayCount == 1 ? "Appointments" : days[dayIndex].ToString("ddd M/d"), _boldFont, header, ForeColor, TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter);

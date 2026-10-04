@@ -13,7 +13,7 @@ public sealed class AppDataStore
 
     public AppDataStore()
     {
-        var folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Organizer");
+        string? folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Organizer");
 
         Directory.CreateDirectory(folder);
         DataFilePath = Path.Combine(folder, "organizer-data.json");
@@ -29,7 +29,7 @@ public sealed class AppDataStore
 
         try
         {
-            var json = File.ReadAllText(path);
+            string? json = File.ReadAllText(path);
 
             return JsonSerializer.Deserialize<OrganizerData>(json, JsonOptions) ?? new OrganizerData();
         }
@@ -37,7 +37,7 @@ public sealed class AppDataStore
         {
             if(backupCorruptFile)
             {
-                var backupPath = path + ".corrupt-" + DateTime.Now.ToString("yyyyMMddHHmmss");
+                string? backupPath = path + ".corrupt-" + DateTime.Now.ToString("yyyyMMddHHmmss");
 
                 File.Copy(path, backupPath, overwrite: true);
             }
@@ -48,7 +48,7 @@ public sealed class AppDataStore
 
     public void SaveTo(OrganizerData data, string path)
     {
-        var json = JsonSerializer.Serialize(data, JsonOptions);
+        string? json = JsonSerializer.Serialize(data, JsonOptions);
 
         File.WriteAllText(path, json);
     }

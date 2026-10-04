@@ -45,6 +45,7 @@ public sealed partial class CreateAppointmentDialog
     /// </summary>
     private void InitializeComponent()
     {
+        ComponentResourceManager resources = new ComponentResourceManager(typeof(CreateAppointmentDialog));
         designerBody = new TableLayoutPanel();
         schedulePanel = new FlowLayoutPanel();
         designerDate = new DateTimePicker();
@@ -110,7 +111,7 @@ public sealed partial class CreateAppointmentDialog
         // designerDate
         // 
         designerDate.Format = DateTimePickerFormat.Short;
-        designerDate.Location = new Point(3, 26);
+        designerDate.Location = new Point(3, 3);
         designerDate.Name = "designerDate";
         designerDate.Size = new Size(92, 23);
         designerDate.TabIndex = 1;
@@ -119,7 +120,7 @@ public sealed partial class CreateAppointmentDialog
         // 
         designerTime.CustomFormat = "h:mm tt";
         designerTime.Format = DateTimePickerFormat.Custom;
-        designerTime.Location = new Point(109, 55);
+        designerTime.Location = new Point(101, 3);
         designerTime.Name = "designerTime";
         designerTime.ShowUpDown = true;
         designerTime.Size = new Size(74, 23);
@@ -127,7 +128,7 @@ public sealed partial class CreateAppointmentDialog
         // 
         // designerDuration
         // 
-        designerDuration.Location = new Point(109, 84);
+        designerDuration.Location = new Point(3, 32);
         designerDuration.Name = "designerDuration";
         designerDuration.ReadOnly = true;
         designerDuration.Size = new Size(54, 23);
@@ -232,7 +233,7 @@ public sealed partial class CreateAppointmentDialog
         // 
         // designerInviteButton
         // 
-        designerInviteButton.Location = new Point(11, 179);
+        designerInviteButton.Location = new Point(11, 73);
         designerInviteButton.Name = "designerInviteButton";
         designerInviteButton.Size = new Size(82, 23);
         designerInviteButton.TabIndex = 3;
@@ -240,7 +241,7 @@ public sealed partial class CreateAppointmentDialog
         // 
         // designerFindTimeButton
         // 
-        designerFindTimeButton.Location = new Point(11, 208);
+        designerFindTimeButton.Location = new Point(11, 102);
         designerFindTimeButton.Name = "designerFindTimeButton";
         designerFindTimeButton.Size = new Size(82, 23);
         designerFindTimeButton.TabIndex = 4;
@@ -248,7 +249,7 @@ public sealed partial class CreateAppointmentDialog
         // 
         // designerAlarmButton
         // 
-        designerAlarmButton.Location = new Point(11, 237);
+        designerAlarmButton.Location = new Point(11, 131);
         designerAlarmButton.Name = "designerAlarmButton";
         designerAlarmButton.Size = new Size(82, 23);
         designerAlarmButton.TabIndex = 5;
@@ -256,7 +257,7 @@ public sealed partial class CreateAppointmentDialog
         // 
         // designerRepeatButton
         // 
-        designerRepeatButton.Location = new Point(11, 266);
+        designerRepeatButton.Location = new Point(11, 160);
         designerRepeatButton.Name = "designerRepeatButton";
         designerRepeatButton.Size = new Size(82, 23);
         designerRepeatButton.TabIndex = 6;
@@ -264,7 +265,7 @@ public sealed partial class CreateAppointmentDialog
         // 
         // designerCostButton
         // 
-        designerCostButton.Location = new Point(11, 295);
+        designerCostButton.Location = new Point(11, 189);
         designerCostButton.Name = "designerCostButton";
         designerCostButton.Size = new Size(82, 23);
         designerCostButton.TabIndex = 7;
@@ -272,7 +273,7 @@ public sealed partial class CreateAppointmentDialog
         // 
         // designerHelpButton
         // 
-        designerHelpButton.Location = new Point(11, 324);
+        designerHelpButton.Location = new Point(11, 218);
         designerHelpButton.Name = "designerHelpButton";
         designerHelpButton.Size = new Size(82, 23);
         designerHelpButton.TabIndex = 8;
@@ -286,6 +287,7 @@ public sealed partial class CreateAppointmentDialog
         Controls.Add(designerBody);
         Controls.Add(designerButtonPanel);
         FormBorderStyle = FormBorderStyle.FixedDialog;
+        Icon = (Icon)resources.GetObject("$this.Icon");
         MaximizeBox = false;
         MinimizeBox = false;
         Name = "CreateAppointmentDialog";

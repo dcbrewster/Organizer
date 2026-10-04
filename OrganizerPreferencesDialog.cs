@@ -51,20 +51,20 @@ public sealed partial class OrganizerPreferencesDialog : Form
         MaximizeBox = false;
         FormBorderStyle = FormBorderStyle.FixedDialog;
 
-        var tabs = new TabControl { Dock = DockStyle.Fill, Padding = new Point(12, 4) };
+        TabControl? tabs = new() { Dock = DockStyle.Fill, Padding = new Point(12, 4) };
         tabs.TabPages.Add(BuildDefaultFilePage());
         tabs.TabPages.Add(BuildEnvironmentPage());
         tabs.TabPages.Add(BuildFoldersPage());
         tabs.TabPages.Add(BuildAlarmPage());
         tabs.TabPages.Add(BuildWebBrowsingPage());
 
-        var okButton = new Button { Text = "OK", DialogResult = DialogResult.OK, Width = 90 };
-        var cancelButton = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 90 };
-        var helpButton = new Button { Text = "&Help", Width = 90 };
+        Button? okButton = new() { Text = "OK", DialogResult = DialogResult.OK, Width = 90 };
+        Button? cancelButton = new() { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 90 };
+        Button? helpButton = new() { Text = "&Help", Width = 90 };
         okButton.Click += (_, _) => SaveValues();
         helpButton.Click += (_, _) => ShowDialogStub("Help Topics");
 
-        var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 48, Padding = new Padding(8), FlowDirection = FlowDirection.RightToLeft };
+        FlowLayoutPanel? buttons = new() { Dock = DockStyle.Bottom, Height = 48, Padding = new Padding(8), FlowDirection = FlowDirection.RightToLeft };
         buttons.Controls.Add(helpButton);
         buttons.Controls.Add(cancelButton);
         buttons.Controls.Add(okButton);
@@ -78,15 +78,17 @@ public sealed partial class OrganizerPreferencesDialog : Form
 
     public static bool Edit(IWin32Window owner, OrganizerPreferences preferences)
     {
-        using var dialog = new OrganizerPreferencesDialog(preferences);
+        using OrganizerPreferencesDialog? dialog = new(preferences);
+
         return dialog.ShowDialog(owner) == DialogResult.OK;
     }
 
     private TabPage BuildWebBrowsingPage()
     {
-        var page = Page("Web Browsing");
-        var body = Body(page);
-        var entries = new ListBox { Height = 92 };
+        TabPage? page = Page("Web Browsing");
+        FlowLayoutPanel? body = Body(page);
+        ListBox? entries = new() { Height = 92 };
+
         AddLabeled(body, "Web &browser", _webBrowser);
         body.Controls.Add(Label("Use &Web entries stored in these files to log into protected Web sites"));
         body.Controls.Add(Sized(entries));
@@ -96,54 +98,64 @@ public sealed partial class OrganizerPreferencesDialog : Form
         AddLabeled(body, "&Port", _proxyPort);
         AddLabeled(body, "B&ypass proxy\r\nfor these domains", _proxyBypassDomains);
         body.Controls.Add(Label("Use this browser to launch Web URLs from within Organizer"));
+
         return page;
     }
 
     private TabPage BuildAlarmPage()
     {
-        var page = Page("Alarms");
-        var body = Body(page);
+        TabPage? page = Page("Alarms");
+        FlowLayoutPanel? body = Body(page);
+
         AddLabeled(body, "&Favorite alarm tune:", _favoriteAlarmTune);
         body.Controls.Add(ButtonRow(Button("Play", () => System.Media.SystemSounds.Asterisk.Play()), Button("Bro&wse...")));
         body.Controls.Add(_displayMissedAlarms);
         body.Controls.Add(Label("Use these Alarm settings as defaults"));
         body.Controls.Add(BuildAlarmDefaultsGrid());
+
         return page;
     }
 
     private TabPage BuildFoldersPage()
     {
-        var page = Page("Folders");
-        var body = Body(page);
+        TabPage? page = Page("Folders");
+        FlowLayoutPanel? body = Body(page);
+
         AddPathRow(body, "&Organizer files", _organizerFilesPath, "B&rowse...");
         AddPathRow(body, "&Paper layouts", _paperLayoutsPath, "Bro&wse...");
         AddPathRow(body, "Custom Smart&Icons", _customSmartIconsPath, "Brow&se...");
         AddPathRow(body, "&Backups", _backupsPath, "Brows&e...");
+
         return page;
     }
 
     private TabPage BuildEnvironmentPage()
     {
-        var page = Page("Environment");
-        var body = Body(page);
+        TabPage? page = Page("Environment");
+        FlowLayoutPanel? body = Body(page);
+
         body.Controls.Add(_animatedPageTurn);
         body.Controls.Add(Label("Mouse pointer"));
         body.Controls.Add(ButtonRow(_plainPointer, _colorPointer, _animatedPointer));
         AddLabeled(body, "Wee&k starts on", _weekStartsOn);
         body.Controls.Add(Label("&Sounds"));
-        var sounds = new ListBox { Height = 70 };
+
+        ListBox? sounds = new() { Height = 70 };
+
         sounds.Items.AddRange(["Appointment alarm", "Task alarm", "Page turn", "Error"]);
         body.Controls.Add(Sized(sounds));
         body.Controls.Add(ButtonRow(Button("Pla&y", () => System.Media.SystemSounds.Asterisk.Play()), Button("S&top"), Button("So&unds...")));
         body.Controls.Add(_muteOrganizerSounds);
         body.Controls.Add(_autoCompleteContactNames);
+
         return page;
     }
 
     private TabPage BuildDefaultFilePage()
     {
-        var page = Page("Default File");
-        var body = Body(page);
+        TabPage? page = Page("Default File");
+        FlowLayoutPanel? body = Body(page);
+
         body.Controls.Add(_automaticallyOpen);
         AddPathRow(body, string.Empty, _automaticallyOpenPath, "B&rowse...");
         body.Controls.Add(_alwaysStartWithNewOrganizerFile);
@@ -151,12 +163,13 @@ public sealed partial class OrganizerPreferencesDialog : Form
         body.Controls.Add(Label("Backup"));
         body.Controls.Add(_createBackupWhenClosed);
         body.Controls.Add(ButtonRow(Button("&Make backup now")));
+
         return page;
     }
 
     private static TabPage Page(string text)
     {
-        var page = new TabPage(text)
+        TabPage? page = new(text)
         {
             Padding = new Padding(12),
             BackColor = SystemColors.Control
@@ -185,7 +198,8 @@ public sealed partial class OrganizerPreferencesDialog : Form
 
     private TableLayoutPanel BuildAlarmDefaultsGrid()
     {
-        var grid = new TableLayoutPanel { ColumnCount = 5, RowCount = 6, Dock = DockStyle.Top, AutoSize = true };
+        TableLayoutPanel? grid = new() { ColumnCount = 5, RowCount = 6, Dock = DockStyle.Top, AutoSize = true };
+
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 105));
@@ -197,8 +211,9 @@ public sealed partial class OrganizerPreferencesDialog : Form
         grid.Controls.Add(new Label { Text = "Unit", AutoSize = true }, 3, 0);
         grid.Controls.Add(new Label { Text = "When", AutoSize = true }, 4, 0);
 
-        var row = 1;
-        foreach(var section in new[] { "A&nniversary", "&Appointment", "Ca&ll", "&Event", "&Task" })
+        int row = 1;
+
+        foreach(string section in new[] { "A&nniversary", "&Appointment", "Ca&ll", "&Event", "&Task" })
         {
             grid.Controls.Add(new Label { Text = section, AutoSize = true, Padding = new Padding(0, 4, 0, 0) }, 0, row);
             grid.Controls.Add(new CheckBox { Text = "On", AutoSize = true }, 1, row);
@@ -220,15 +235,14 @@ public sealed partial class OrganizerPreferencesDialog : Form
 
     private void AddPathRow(Control parent, string label, TextBox textBox, string buttonText)
     {
-        var panel = new TableLayoutPanel { Width = 590, Height = 30, ColumnCount = 2 };
+        TableLayoutPanel? panel = new() { Width = 590, Height = 30, ColumnCount = 2 };
+
         panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 92));
         textBox.Dock = DockStyle.Fill;
         panel.Controls.Add(textBox, 0, 0);
-        if(!string.IsNullOrWhiteSpace(label))
-        {
-            parent.Controls.Add(Label(label));
-        }
+
+        if(!string.IsNullOrWhiteSpace(label)) parent.Controls.Add(Label(label));
 
         panel.Controls.Add(BrowseButton(buttonText, textBox), 1, 0);
         parent.Controls.Add(panel);
@@ -236,40 +250,39 @@ public sealed partial class OrganizerPreferencesDialog : Form
 
     private static FlowLayoutPanel ButtonRow(params Control[] controls)
     {
-        var panel = new FlowLayoutPanel { Width = 590, Height = 34, FlowDirection = FlowDirection.LeftToRight };
+        FlowLayoutPanel? panel = new() { Width = 590, Height = 34, FlowDirection = FlowDirection.LeftToRight };
         panel.Controls.AddRange(controls);
+
         return panel;
     }
 
     private Button Button(string text, Action? action = null)
     {
-        var button = new Button { Text = text, Width = Math.Max(90, TextRenderer.MeasureText(text.Replace("&", string.Empty, StringComparison.Ordinal), SystemFonts.MessageBoxFont).Width + 24) };
+        Button? button = new() { Text = text, Width = Math.Max(90, TextRenderer.MeasureText(text.Replace("&", string.Empty, StringComparison.Ordinal), SystemFonts.MessageBoxFont).Width + 24) };
         button.Click += (_, _) => (action ?? (() => ShowDialogStub(text)))();
+
         return button;
     }
 
     private Button BrowseButton(string text, TextBox target)
     {
-        var button = Button(text, () =>
+        Button? button = Button(text, () =>
         {
             using var dialog = new FolderBrowserDialog { SelectedPath = Directory.Exists(target.Text) ? target.Text : Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments) };
-            if(dialog.ShowDialog(this) == DialogResult.OK)
-            {
-                target.Text = dialog.SelectedPath;
-            }
+            if(dialog.ShowDialog(this) == DialogResult.OK) target.Text = dialog.SelectedPath;
         });
+
         button.Width = 88;
+
         return button;
     }
 
     private static ComboBox DropDown(string[] values)
     {
-        var comboBox = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+        ComboBox? comboBox = new() { DropDownStyle = ComboBoxStyle.DropDownList };
         comboBox.Items.AddRange(values);
-        if(comboBox.Items.Count > 0)
-        {
-            comboBox.SelectedIndex = 0;
-        }
+
+        if(comboBox.Items.Count > 0) comboBox.SelectedIndex = 0;
 
         return comboBox;
     }
@@ -326,14 +339,12 @@ public sealed partial class OrganizerPreferencesDialog : Form
         _preferences.CreateBackupWhenClosed = _createBackupWhenClosed.Checked;
     }
 
-    private static void SelectItem(ComboBox comboBox, string value)
-    {
-        comboBox.SelectedItem = comboBox.Items.Cast<object>().FirstOrDefault(item => string.Equals(item.ToString(), value, StringComparison.OrdinalIgnoreCase)) ?? comboBox.Items[0];
-    }
+    private static void SelectItem(ComboBox comboBox, string value) => comboBox.SelectedItem = comboBox.Items.Cast<object>().FirstOrDefault(item => string.Equals(item.ToString(), value, StringComparison.OrdinalIgnoreCase)) ?? comboBox.Items[0];
 
     private void ShowDialogStub(string commandText)
     {
-        var cleanText = commandText.Split('\t')[0].Replace("&", string.Empty, StringComparison.Ordinal).Replace("...", string.Empty, StringComparison.Ordinal);
+        string? cleanText = commandText.Split('\t')[0].Replace("&", string.Empty, StringComparison.Ordinal).Replace("...", string.Empty, StringComparison.Ordinal);
+
         MessageBox.Show(this, $"{cleanText} is not yet implemented.", "Not Yet Implemented", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 }

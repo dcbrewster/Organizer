@@ -48,6 +48,60 @@ public sealed class OrganizerPreferences
     public int MarginRight { get; set; } = 100;
     public int MarginTop { get; set; } = 100;
     public int MarginBottom { get; set; } = 100;
+    // UI state persistence
+    public string LastSection { get; set; } = "Calendar";
+    public string LastCalendarView { get; set; } = "Day";
+
+    // Mail & scheduling preferences
+    public string MailProgram { get; set; } = "Microsoft Outlook";
+    public string MailProtocol { get; set; } = "POP3";
+    // Mail tab
+    public string MailDefaultFrom { get; set; } = string.Empty;
+    public string MailSignature { get; set; } = string.Empty;
+
+    // Legacy scheduling & mail fields captured from org6.exe
+    // Scheduling identification
+    public bool UseCurrentOrganizerFileToReceiveMessages { get; set; }
+    public string OrganizerFilePath { get; set; } = string.Empty;
+    public string SchedulingName { get; set; } = string.Empty;
+    public string SchedulingEmail { get; set; } = string.Empty;
+    public List<string> SchedulingForwardingAddresses { get; set; } = [];
+
+    // Connections tab
+    public int CheckInboxEveryMinutes { get; set; } = 0;
+    // FavoriteAlarmTune already exists above as FavoriteAlarmTune
+    public DateTime LastMeetingNoticeDate { get; set; } = DateTime.MinValue;
+    public bool RequestConfirmationBeforeProcessingNotices { get; set; }
+    public bool DeleteNoticesFromInboxAfterRetrieval { get; set; }
+
+    // Auto-process flags
+    public bool AutoProcessChairAcceptances { get; set; }
+    public bool AutoProcessChairDeclines { get; set; }
+    public bool AutoProcessChairWithMessages { get; set; }
+    public bool AutoProcessInviteeInvitations { get; set; }
+    public bool AutoProcessInviteeCancellations { get; set; }
+    public bool AutoProcessInviteeRescheduling { get; set; }
+    public bool AutoProcessInviteeStatusUpdates { get; set; }
+    public bool AutoProcessInviteeConfirmations { get; set; }
+
+    // Scheduling tab
+    public bool SendMeetingRequests { get; set; } = true;
+    public int DefaultReminderMinutes { get; set; } = 15;
+    public int DefaultMeetingLengthMinutes { get; set; } = 60;
+
+    // Connections tab
+    public string MailServer { get; set; } = string.Empty;
+    public int MailServerPort { get; set; } = 110;
+    public string MailUsername { get; set; } = string.Empty;
+    public string MailPassword { get; set; } = string.Empty;
+    public bool MailUseSsl { get; set; }
+
+    // Auto-process tab
+    public List<string> AutoProcessRules { get; set; } = [];
+
+    // Busy time tab
+    public bool PublishBusyTime { get; set; }
+    public string BusyTimePublishUrl { get; set; } = string.Empty;
 }
 
 /// <summary>

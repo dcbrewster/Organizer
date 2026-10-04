@@ -1,6 +1,6 @@
 using System.ComponentModel;
-using System.Drawing;
 using System.Drawing.Printing;
+using System.Linq;
 using System.Text;
 using Organizer.About;
 
@@ -14,11 +14,62 @@ public sealed partial class MainForm : Form
     private readonly Dictionary<string, BindingSource> _sectionSources = [];
     private TabControl _tabs = null!;
     private CalendarPlannerView? _planner;
+
     // Binder panel collapse state
     private int _binderPanelLastWidth = 260;
+
     private bool _binderPanelCollapsed = false;
+
     // Reference to the View menu item so we can update its text when toggling
     private ToolStripMenuItem? _collapseBinderPanelMenuItem;
+
+    // Appointment menu items that reflect the currently-focused appointment state
+    private ToolStripMenuItem? _warnOfConflictsMenuItem;
+
+    private ToolStripMenuItem? _pencilInMenuItem;
+    private ToolStripMenuItem? _confidentialMenuItem;
+
+    // Current focused appointment (kept at instance scope so menu updates can be driven from anywhere)
+    private CalendarEvent? _selectedCalendarEvent;
+
+    // Update the appointment-related menu items to reflect the current focused appointment
+    private void UpdateAppointmentMenuItems()
+    {
+        bool hasEvent = _selectedCalendarEvent is not null;
+
+        if(_warnOfConflictsMenuItem is not null)
+        {
+            _warnOfConflictsMenuItem.Enabled = hasEvent;
+            _warnOfConflictsMenuItem.Checked = _selectedCalendarEvent?.WarnOfConflicts ?? false;
+        }
+
+        if(_pencilInMenuItem is not null)
+        {
+            _pencilInMenuItem.Enabled = hasEvent;
+            _pencilInMenuItem.Checked = _selectedCalendarEvent?.PencilIn ?? false;
+        }
+
+        if(_confidentialMenuItem is not null)
+        {
+            _confidentialMenuItem.Enabled = hasEvent;
+            _confidentialMenuItem.Checked = _selectedCalendarEvent?.Confidential ?? false;
+        }
+    }
+
+    // Small clickable label placed above the calendar to toggle the binder panel
+    private Label? _binderToggleLabel;
+
+    // Stores original visibility of left-panel child controls when collapsed so we can restore on expand
+    private Dictionary<Control, bool>? _leftPanelChildVisibility;
+
+    // Animation for collapsing/expanding the left binder panel
+    private System.Windows.Forms.Timer? _binderAnimationTimer;
+
+    private int _binderAnimationTargetWidth = 0;
+    private bool _binderAnimationExpanding = false;
+
+    // Shared tooltip for small UI elements
+    private ToolTip? _toolTip;
 
     // Drag/drop support for tab reordering
     private int _dragTabIndex = -1;
@@ -49,6 +100,119 @@ public sealed partial class MainForm : Form
 
         return DayOfWeek.Sunday;
     }
+
+    private void StartBinderAnimation(int targetWidth, bool expanding)
+    {
+        try
+        {
+            // Initialize timer if needed
+            if(_binderAnimationTimer is null)
+            {
+                _binderAnimationTimer = new System.Windows.Forms.Timer { Interval = 15 };
+                _binderAnimationTimer.Tick += (_, _) =>
+                {
+                    try
+                    {
+                        if(designerCalendarLeftPanel is null) return;
+
+                        int current = designerCalendarLeftPanel.Width;
+                        int target = _binderAnimationTargetWidth;
+
+                        if(current == target)
+                        {
+                            _binderAnimationTimer?.Stop();
+                            _binderAnimationAnimating = false;
+
+                            // Finalize state
+                            if(_binderAnimationExpanding)
+                            {
+                                // Restore children visibility
+                                try
+                                {
+                                    if(_leftPanelChildVisibility is not null)
+                                    {
+                                        foreach(var kvp in _leftPanelChildVisibility)
+                                        {
+                                            try { if(kvp.Key is not null) kvp.Key.Visible = kvp.Value; } catch { }
+                                        }
+
+                                        _leftPanelChildVisibility = null;
+                                    }
+                                    else
+                                    {
+                                        foreach(Control c in designerCalendarLeftPanel.Controls)
+                                        {
+                                            if(object.ReferenceEquals(c, _binderToggleLabel)) continue;
+                                            c.Visible = true;
+                                        }
+                                    }
+                                }
+                                catch { }
+
+                                // Restore min size
+                                try { designerCalendarLeftPanel.MinimumSize = new Size(_binderPanelLastWidth > 0 ? _binderPanelLastWidth : 260, 0); } catch { }
+                                _binderPanelCollapsed = false;
+                            }
+                            else
+                            {
+                                // Collapsed: ensure only glyph remains visible
+                                try
+                                {
+                                    foreach(Control c in designerCalendarLeftPanel.Controls)
+                                    {
+                                        if(object.ReferenceEquals(c, _binderToggleLabel)) { c.Visible = true; continue; }
+                                        c.Visible = false;
+                                    }
+                                }
+                                catch { }
+
+                                // Tighten minimum size to the glyph width
+                                try { if(_binderToggleLabel is not null) designerCalendarLeftPanel.MinimumSize = new Size(Math.Max(24, _binderToggleLabel.Width + 8), 0); } catch { }
+                                _binderPanelCollapsed = true;
+                            }
+
+                            // Update view/menu/glyph after animation finishes
+                            try
+                            {
+                                if(_collapseBinderPanelMenuItem is not null) _collapseBinderPanelMenuItem.Text = _binderPanelCollapsed ? "Expand Binder Panel\tF12" : "Collapse Binder Panel\tF12";
+                                if(_binderToggleLabel is not null) _binderToggleLabel.Text = _binderPanelCollapsed ? "\u25B6" : "\u25BC";
+                            }
+                            catch { }
+
+                            designerCalendarLeftPanel.Parent?.PerformLayout();
+                            _tabs.Parent?.PerformLayout();
+                            _tabs.Invalidate();
+
+                            return;
+                        }
+
+                        // Move towards target using an easing step
+                        int diff = target - current;
+                        int step = Math.Max(1, Math.Abs(diff) / 6);
+                        int next = current + Math.Sign(diff) * step;
+                        // Clamp to target
+                        if((diff > 0 && next > target) || (diff < 0 && next < target)) next = target;
+
+                        try { designerCalendarLeftPanel.Width = next; } catch { }
+                    }
+                    catch { }
+                };
+            }
+
+            _binderAnimationTargetWidth = targetWidth;
+            _binderAnimationExpanding = expanding;
+            _binderAnimationAnimating = true;
+
+            // Ensure layout does not prevent the animation: relax minimum size before animating
+            try { designerCalendarLeftPanel.MinimumSize = new Size(0, 0); } catch { }
+
+            _binderAnimationTimer.Start();
+        }
+        catch { }
+    }
+
+    // Tracks active animation
+    private bool _binderAnimationAnimating = false;
 
     private static System.Windows.Forms.Day ConvertToWinFormsDay(DayOfWeek dow)
     {
@@ -98,7 +262,7 @@ public sealed partial class MainForm : Form
         Height = 700;
         StartPosition = FormStartPosition.CenterScreen;
 
-        MenuStrip? menuStrip = BuildMainMenu();
+        MenuStrip? menuStrip = null;
         ToolStrip? iconLine = BuildIconLine();
 
         _tabs = new TabControl { Dock = DockStyle.Fill, Alignment = TabAlignment.Right, Multiline = true };
@@ -170,8 +334,13 @@ public sealed partial class MainForm : Form
                 _tabs.Invalidate();
             }
             catch { }
+            // Note: glyph and runtime tooltips are created in BuildCalendarTab after the left panel is populated
         }
         catch { }
+
+        // Now that tabs have been created, build the main menu so the "Turn To" submenu
+        // can be populated from the actual tab pages.
+        try { menuStrip = BuildMainMenu(); } catch { menuStrip = null; }
 
         Controls.Add(content);
         Controls.Add(iconLine);
@@ -262,16 +431,37 @@ public sealed partial class MainForm : Form
 
         if(!_binderPanelCollapsed)
         {
-            // Save current width then hide
+            // Start collapse: save width, hide children (except glyph), and animate to glyph-only width
             _binderPanelLastWidth = designerCalendarLeftPanel.Width > 0 ? designerCalendarLeftPanel.Width : _binderPanelLastWidth;
-            designerCalendarLeftPanel.Visible = false;
-            _binderPanelCollapsed = true;
+
+            try
+            {
+                // Record current visibility for later restore but don't hide them immediately; hiding will occur when animation completes to avoid layout side-effects.
+                _leftPanelChildVisibility = new Dictionary<Control, bool>();
+                foreach(Control c in designerCalendarLeftPanel.Controls)
+                {
+                    if(object.ReferenceEquals(c, _binderToggleLabel))
+                    {
+                        // ensure glyph remains visible
+                        _leftPanelChildVisibility[c] = true;
+                        continue;
+                    }
+
+                    _leftPanelChildVisibility[c] = c.Visible;
+                }
+
+                int glyphWidth = 24;
+                try { if(_binderToggleLabel is not null && _binderToggleLabel.PreferredSize.Width > 0) glyphWidth = Math.Max(24, _binderToggleLabel.PreferredSize.Width + 8); } catch { }
+
+                StartBinderAnimation(glyphWidth, expanding: false);
+            }
+            catch { }
         }
         else
         {
-            designerCalendarLeftPanel.Width = _binderPanelLastWidth > 0 ? _binderPanelLastWidth : 260;
-            designerCalendarLeftPanel.Visible = true;
-            _binderPanelCollapsed = false;
+            // Start expand: animate back to saved width, will restore children at end
+            int restoreWidth = _binderPanelLastWidth > 0 ? _binderPanelLastWidth : 260;
+            StartBinderAnimation(restoreWidth, expanding: true);
         }
 
         // Force layout update so the tab control fills the available space
@@ -279,11 +469,7 @@ public sealed partial class MainForm : Form
         _tabs.Parent?.PerformLayout();
         _tabs.Invalidate();
 
-        // Update View menu text to reflect current action
-        if(_collapseBinderPanelMenuItem is not null)
-        {
-            _collapseBinderPanelMenuItem.Text = _binderPanelCollapsed ? "Expand Binder Panel\tF12" : "Collapse Binder Panel\tF12";
-        }
+        // Menu/glyph will be updated when the animation completes
     }
 
     private void LogLeftPanelLayout(string reason)
@@ -295,7 +481,6 @@ public sealed partial class MainForm : Form
 
             if(left is null || month is null)
             {
-                System.Diagnostics.Debug.WriteLine($"LogLeftPanelLayout({reason}): left or month null");
                 return;
             }
 
@@ -305,11 +490,11 @@ public sealed partial class MainForm : Form
             Rectangle monthClient = month.ClientRectangle;
             bool leftVisible = left.Visible;
 
-            System.Diagnostics.Debug.WriteLine($"LogLeftPanelLayout({reason}): left.Visible={leftVisible}, left.Bounds={leftBounds}, left.Client={leftClient}, month.Bounds={monthBounds}, month.Client={monthClient}");
+            // left panel layout: left.Visible={leftVisible}, left.Bounds={leftBounds}, left.Client={leftClient}, month.Bounds={monthBounds}, month.Client={monthClient}
         }
         catch(Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"LogLeftPanelLayout({reason}) failed: {ex.Message}");
+            // Swallow layout logging exceptions
         }
     }
 
@@ -584,44 +769,154 @@ public sealed partial class MainForm : Form
     {
         MenuStrip? menu = new() { Dock = DockStyle.Top };
 
+        // Build the Turn To submenu items from the current tabs so the menu reflects runtime sections.
+        ToolStripItem[] turnToItems;
+        try
+        {
+            var _turnToListAll = new List<ToolStripItem>();
+            if(_tabs is not null)
+            {
+                foreach(TabPage tp in _tabs.TabPages)
+                {
+                    try { _turnToListAll.Add(Command(tp.Text, "Turn To " + tp.Text)); } catch { }
+                }
+            }
+
+            const int maxVisible = 10;
+            var visibleList = _turnToListAll.Take(maxVisible).ToList();
+
+            // Only show the "More sections..." entry when there are more than maxVisible sections
+            if(_turnToListAll.Count > maxVisible)
+            {
+                visibleList.Add(Command("&More sections..."));
+            }
+
+            // Fallback to at least the More entry if nothing was discovered
+            if(visibleList.Count == 0) visibleList.Add(Command("&More sections..."));
+
+            turnToItems = visibleList.ToArray();
+        }
+        catch
+        {
+            turnToItems = new ToolStripItem[] { Command("&More sections...") };
+        }
+
+        // Build the Entry In submenu items dynamically from the current tabs.
+        ToolStripItem[] entryInItems;
+        try
+        {
+            var _entryInAll = new List<ToolStripItem>();
+            if(_tabs is not null)
+            {
+                foreach(TabPage tp in _tabs.TabPages)
+                {
+                    try { _entryInAll.Add(Command(tp.Text + "...", "Entry In " + tp.Text)); } catch { }
+                }
+            }
+
+            const int maxVisibleEntry = 10;
+            var visibleEntry = _entryInAll.Take(maxVisibleEntry).ToList();
+
+            if(_entryInAll.Count > maxVisibleEntry)
+            {
+                visibleEntry.Add(Command("&More sections..."));
+            }
+
+            if(visibleEntry.Count == 0) visibleEntry.Add(Command("&More sections..."));
+
+            entryInItems = visibleEntry.ToArray();
+        }
+        catch
+        {
+            entryInItems = new ToolStripItem[] { Command("&More sections...") };
+        }
+
         // Create the collapse/expand menu item so we can update its text on toggle
         _collapseBinderPanelMenuItem = Command("Collapse Bi&nder Panel\tF12");
 
-        menu.Items.AddRange([
-            BuildMenu("&File", [
-                Command("&New\tCtrl+N"),
-                Command("&Open\tCtrl+O"),
-                Command("&Close\tCtrl+W"),
-                Separator(),
-                Command("Save &As...\tShift+Ctrl+S"),
-                Separator(),
-                Command("A&rchive...\tCtrl+A"),
-                Command("Co&mpact..."),
-                Command("Mer&ge...\tCtrl+M"),
-                Command("&Import...\tCtrl+I"),
-                Command("&Export..."),
-                Separator(),
-                Command("Mee&ting Notices..."),
-                Command("&Work Offline"),
-                Separator(),
-                Command("Send Mai&l..."),
-                Separator(),
-                Command("Publish &Busy Time Now"),
-                Command("Publis&h as Web Pages..."),
-                Separator(),
-                Command("&Print...\tCtrl+P"),
-                BuildMenu("&User Setup", [
-                    Command("&Organizer Preferences..."),
-                    Command("&Printer...\tShift+Ctrl+P"),
-                    Command("Mail and &Scheduling..."),
-                    Command("Smart&Icons..."),
-                    Command("Pass&words...\tCtrl+U"),
-                    Command("&Telephone Dialing...")
-                ]),
-                Separator(),
-                Command("E&xit Organizer")
-            ]),
-            BuildMenu("&Edit", [
+        // Build appointment menu separately so we can update its DropDownOpening before display
+        var appointmentMenu = BuildMenu("&Appointment", new ToolStripItem[] {
+            Command("&Categorize...\tF5"),
+            Command("A&larm...\tF6"),
+            Command("&Repeat...\tF7"),
+            Command("C&ost...\tF8"),
+            Separator(),
+            // Create explicit references so we can update checked/enabled state when an appointment is focused
+            (_warnOfConflictsMenuItem = CreateMenuItemFromText("&Warn Of Conflicts", "Warn Of Conflicts", false)),
+            (_pencilInMenuItem = CreateMenuItemFromText("&Pencil in", "Pencil in", false)),
+            (_confidentialMenuItem = CreateMenuItemFromText("Con&fidential\tF4", "Confidential", false))
+        });
+
+        // Build recent files menu items (bottom of File menu)
+        ToolStripItem[] recentFileItems;
+        try
+        {
+            var recent = new List<ToolStripItem>();
+            var recentPaths = _data?.Preferences?.RecentFiles ?? new List<string>();
+            foreach(var path in recentPaths.Take(10))
+            {
+                try
+                {
+                    var item = CreateMenuItemFromText(path, "OpenRecent:" + path);
+                    item.ToolTipText = path;
+                    recent.Add(item);
+                }
+                catch { }
+            }
+
+            if(recent.Count == 0)
+            {
+                recent.Add(Command("(No recent files)"));
+            }
+
+            recentFileItems = recent.ToArray();
+        }
+        catch
+        {
+            recentFileItems = new ToolStripItem[] { Command("(No recent files)") };
+        }
+
+        // Build File menu children and append recent items
+        var fileChildren = new List<ToolStripItem>() {
+            Command("&New\tCtrl+N"),
+            Command("&Open\tCtrl+O"),
+            Command("&Close\tCtrl+W"),
+            Separator(),
+            Command("Save &As...\tShift+Ctrl+S"),
+            Separator(),
+            Command("A&rchive...\tCtrl+A"),
+            Command("Co&mpact..."),
+            Command("Mer&ge...\tCtrl+M"),
+            Command("&Import...\tCtrl+I"),
+            Command("&Export..."),
+            Separator(),
+            Command("Mee&ting Notices..."),
+            Command("&Work Offline"),
+            Separator(),
+            Command("Send Mai&l..."),
+            Separator(),
+            Command("Publish &Busy Time Now"),
+            Command("Publis&h as Web Pages..."),
+            Separator(),
+            Command("&Print...\tCtrl+P"),
+            BuildMenu("&User Setup", new ToolStripItem[] {
+                Command("&Organizer Preferences..."),
+                Command("&Printer...\tShift+Ctrl+P"),
+                Command("Mail and &Scheduling..."),
+                Command("Smart&Icons..."),
+                Command("Pass&words...\tCtrl+U"),
+                Command("&Telephone Dialing...")
+            }),
+            Separator(),
+            Command("E&xit Organizer"),
+            Separator()
+        };
+
+        fileChildren.AddRange(recentFileItems);
+
+        menu.Items.AddRange(new ToolStripItem[] {
+            BuildMenu("&File", fileChildren.ToArray()),
+            BuildMenu("&Edit", new ToolStripItem[] {
                 Command("&Undo\tCtrl+Z"),
                 Separator(),
                 Command("Cu&t\tCtrl+X"),
@@ -641,8 +936,8 @@ public sealed partial class MainForm : Form
                 Command("Find Person via &Internet...\tCtrl+J"),
                 Separator(),
                 Command("OLE Li&nks...")
-            ]),
-            BuildMenu("&View", [
+            }),
+            BuildMenu("&View", new ToolStripItem[] {
                 Command("&1 Day Planner"),
                 Command("&2 Day per Page"),
                 Command("&3 Multiple Calendar"),
@@ -661,21 +956,10 @@ public sealed partial class MainForm : Form
                 Command("C&lear Filter"),
                 Separator(),
                 Command("Calendar &Preferences...")
-            ]),
-            BuildMenu("&Create", [
+            }),
+            BuildMenu("&Create", new ToolStripItem[] {
                 Command("&Appointment...\tIns"),
-                BuildMenu("&Entry In", [
-                    Command("Calendar...", "Entry In Calendar"),
-                    Command("To Do...", "Entry In To Do"),
-                    Command("Contacts...", "Entry In Contacts"),
-                    Command("Notepad...", "Entry In Notepad"),
-                    Command("Anniversary...", "Entry In Anniversary"),
-                    Command("Holidays...", "Entry In Holidays"),
-                    Command("Recipies...", "Entry In Recipies"),
-                    Command("Races...", "Entry In Races"),
-                    Command("Blue Jays...", "Entry In Blue Jays"),
-                    Command("&More sections...")
-                ]),
+                BuildMenu("&Entry In", entryInItems),
                 Separator(),
                 Command("Organizer &Link\tCtrl+L"),
                 Command("Co&mment Link..."),
@@ -691,50 +975,89 @@ public sealed partial class MainForm : Form
                 Command("&Group of Contacts..."),
                 Command("Street Ma&p..."),
                 Command("Dri&ving Directions...")
-            ]),
-            BuildMenu("&Section", [
+            }),
+            BuildMenu("&Section", new ToolStripItem[] {
                 Command("&Customize..."),
                 Command("&Show Through..."),
                 Command("&Include..."),
                 Separator(),
-                BuildMenu("&Turn To", [
-                    Command("Calendar", "Turn To Calendar"),
-                    Command("To Do", "Turn To To Do"),
-                    Command("Contacts", "Turn To Contacts"),
-                    Command("Notepad", "Turn To Notepad"),
-                    Command("Anniversary", "Turn To Anniversary"),
-                    Command("Holidays", "Turn To Holidays"),
-                    Command("Recipies", "Turn To Recipies"),
-                    Command("Races", "Turn To Races"),
-                    Command("Blue Jays", "Turn To Blue Jays"),
-                    Command("&More sections...")
-                ])
-            ]),
-            BuildMenu("&Appointment", [
-                Command("&Categorize...\tF5"),
-                Command("A&larm...\tF6"),
-                Command("&Repeat...\tF7"),
-                Command("C&ost...\tF8"),
-                Separator(),
-                Command("&Warn Of Conflicts"),
-                Command("&Pencil in"),
-                Command("Con&fidential\tF4")
-            ]),
-            BuildMenu("&Phone", [
+                BuildMenu("&Turn To", turnToItems)
+            }),
+            appointmentMenu,
+            BuildMenu("&Phone", new ToolStripItem[] {
                 Command("&Dial...\tCtrl+D"),
                 Command("&Quick Dial...\tCtrl+Q"),
                 Separator(),
                 Command("&Incoming Call..."),
                 Separator(),
                 Command("&Change Area Codes...")
-            ]),
-            BuildMenu("&Help", [
+            }),
+            BuildMenu("&Help", new ToolStripItem[] {
                 Command("&Help Topics"),
                 Command("&Bubble Help\tCtrl+F1"),
                 Separator(),
                 Command("&About Organizer")
-            ])
-        ]);
+            })
+        });
+
+        // Wire up click handlers for appointment menu items so they toggle the focused appointment
+        // and persist the change immediately.
+        if(_warnOfConflictsMenuItem is not null)
+        {
+            _warnOfConflictsMenuItem.Click += (_, _) =>
+            {
+                if(_selectedCalendarEvent is CalendarEvent ev)
+                {
+                    ev.WarnOfConflicts = !ev.WarnOfConflicts;
+
+                    try
+                    {
+                        _store.Save(_data);
+                    }
+                    catch { }
+
+                    UpdateAppointmentMenuItems();
+                    _refreshCalendar();
+                }
+                };
+        }
+
+        _pencilInMenuItem?.Click += (_, _) =>
+            {
+                if(_selectedCalendarEvent is CalendarEvent ev)
+                {
+                    ev.PencilIn = !ev.PencilIn;
+
+                    try
+                    {
+                        _store.Save(_data);
+                    }
+                    catch { }
+
+                    UpdateAppointmentMenuItems();
+                    _refreshCalendar();
+                }
+            };
+
+        _confidentialMenuItem?.Click += (_, _) =>
+            {
+                if(_selectedCalendarEvent is CalendarEvent ev)
+                {
+                    ev.Confidential = !ev.Confidential;
+
+                    try
+                    {
+                        _store.Save(_data);
+                    }
+                    catch { }
+
+                    UpdateAppointmentMenuItems();
+                    _refreshCalendar();
+                }
+            };
+
+        // Update menu state when the appointment menu is opened so checks reflect current selection
+        appointmentMenu?.DropDownOpening += (_, _) => UpdateAppointmentMenuItems();
 
         return menu;
     }
@@ -750,18 +1073,54 @@ public sealed partial class MainForm : Form
 
     private ToolStripMenuItem Command(string text)
     {
-        ToolStripMenuItem? menuItem = new(text);
-
-        menuItem.Click += (_, _) => ExecuteCommand(text);
-
-        return menuItem;
+        return CreateMenuItemFromText(text, text);
     }
 
     private ToolStripMenuItem Command(string text, string commandKey)
     {
-        ToolStripMenuItem? menuItem = new(text);
+        return CreateMenuItemFromText(text, commandKey);
+    }
 
-        menuItem.Click += (_, _) => ExecuteCommand(commandKey);
+    // Helper that parses menu text for an optional '\t' separated shortcut (e.g. "&New\tCtrl+N").
+    // If a shortcut is present it is assigned to ShortcutKeys so the renderer places it at the
+    // right-hand side of the menu item rather than being part of the item text.
+    private ToolStripMenuItem CreateMenuItemFromText(string text, string commandKey, bool attachExecuteCommand = true)
+    {
+        string displayText = text;
+        string? shortcutText = null;
+
+        int tabIndex = text.IndexOf('\t');
+        if(tabIndex >= 0)
+        {
+            displayText = text.Substring(0, tabIndex);
+            shortcutText = text.Substring(tabIndex + 1);
+        }
+
+        ToolStripMenuItem menuItem = new(displayText);
+        if(attachExecuteCommand)
+        {
+            menuItem.Click += (_, _) => ExecuteCommand(commandKey);
+        }
+
+        if(!string.IsNullOrEmpty(shortcutText))
+        {
+            try
+            {
+                // Normalize common alias tokens used in the menu specifications (e.g. Ins -> Insert)
+                string normalized = shortcutText!.Trim();
+                normalized = normalized.Replace("Ins", "Insert", StringComparison.OrdinalIgnoreCase);
+                normalized = normalized.Replace("Del", "Delete", StringComparison.OrdinalIgnoreCase);
+                normalized = normalized.Replace("Ctrl+", "Control+", StringComparison.OrdinalIgnoreCase);
+
+                var keys = (Keys)TypeDescriptor.GetConverter(typeof(Keys)).ConvertFromString(normalized)!;
+                menuItem.ShortcutKeys = keys;
+                menuItem.ShowShortcutKeys = true;
+            }
+            catch
+            {
+                // Ignore parse errors and leave the text as-is
+            }
+        }
 
         return menuItem;
     }
@@ -789,6 +1148,7 @@ public sealed partial class MainForm : Form
         if(command.Equals("About Organizer", StringComparison.OrdinalIgnoreCase))
         {
             aboutToolStripMenuItem_Click(this, EventArgs.Empty);
+
             return;
         }
 
@@ -838,29 +1198,35 @@ public sealed partial class MainForm : Form
                 Close();
                 return true;
 
-            case "Calendar":
-            case "Turn To Calendar":
-                SelectSection("Calendar");
+            // Generic handler for "Turn To <Section>" commands generated from the Turn To submenu.
+            case string s when s.StartsWith("Turn To ", StringComparison.OrdinalIgnoreCase):
+                try
+                {
+                    var sectionName = s.Substring("Turn To ".Length);
+                    SelectSection(sectionName);
+                }
+                catch { }
+
                 return true;
 
-            case "Contacts":
-            case "Turn To Contacts":
-                SelectSection("Contacts");
-                return true;
+            // Generic handler for recent/opened files
+            case string s when s.StartsWith("OpenRecent:", StringComparison.OrdinalIgnoreCase):
+                try
+                {
+                    var path = s.Substring("OpenRecent:".Length);
+                    if(File.Exists(path))
+                    {
+                        LoadData(_store.LoadFrom(path));
+                        _currentFilePath = path;
+                        AddToRecentFiles(path);
+                    }
+                    else
+                    {
+                        MessageBox.Show(this, $"File not found: {path}", "Open Recent", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
+                }
+                catch { }
 
-            case "Anniversary":
-            case "Turn To Anniversary":
-                SelectSection("Anniversary");
-                return true;
-
-            case "To Do":
-            case "Turn To To Do":
-                SelectSection("To Do");
-                return true;
-
-            case "Notepad":
-            case "Turn To Notepad":
-                SelectSection("Notepad");
                 return true;
 
             case "1 Day Planner":
@@ -1120,6 +1486,7 @@ public sealed partial class MainForm : Form
 
         LoadData(_store.LoadFrom(dialog.FileName));
         _currentFilePath = dialog.FileName;
+        try { AddToRecentFiles(dialog.FileName); } catch { }
     }
 
     private void SaveOrganizerAs()
@@ -1136,6 +1503,7 @@ public sealed partial class MainForm : Form
         {
             _store.SaveTo(_data, dialog.FileName);
             _currentFilePath = dialog.FileName;
+            try { AddToRecentFiles(dialog.FileName); } catch { }
         }
     }
 
@@ -1169,6 +1537,31 @@ public sealed partial class MainForm : Form
         target.Clear();
 
         if(source is not null) target.AddRange(source);
+    }
+
+    private void AddToRecentFiles(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return;
+
+        try
+        {
+            var prefs = _data.Preferences ??= new OrganizerPreferences();
+
+            // Remove any existing case-insensitive duplicate
+            prefs.RecentFiles.RemoveAll(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
+
+            // Insert at head
+            prefs.RecentFiles.Insert(0, path);
+
+            // Trim to 10 entries
+            if (prefs.RecentFiles.Count > 10)
+            {
+                prefs.RecentFiles.RemoveRange(10, prefs.RecentFiles.Count - 10);
+            }
+
+            try { _store.Save(_data); } catch { }
+        }
+        catch { }
     }
 
     private void RefreshSectionSource<T>(string sectionName, List<T> items) where T : class
@@ -1349,8 +1742,12 @@ public sealed partial class MainForm : Form
     private void ShowAlarms()
     {
         DateTime today = DateTime.Today;
-        IEnumerable<string>? upcomingEvents = _data.Events.Where(item => item.Start >= DateTime.Now && item.Start < today.AddDays(7)).OrderBy(item => item.Start).Select(item => $"Appointment: {item.Start:g} {item.Title}");
-        IEnumerable<string>? dueTasks = _data.Tasks.Where(item => !item.Completed && item.DueDate.Date <= today.AddDays(7)).OrderBy(item => item.DueDate).Select(item => $"To Do: {item.DueDate:g} {item.Title}");
+        IEnumerable<string>? upcomingEvents = _data.Events.Where(item => item.Start >= DateTime.Now && item.Start < today.AddDays(7))
+            .OrderBy(item => item.Start)
+            .Select(item => $"Appointment: {item.Start:g} {item.Title}");
+        IEnumerable<string>? dueTasks = _data.Tasks.Where(item => !item.Completed && item.DueDate.Date <= today.AddDays(7))
+            .OrderBy(item => item.DueDate)
+            .Select(item => $"To Do: {item.DueDate:g} {item.Title}");
         IEnumerable<string>? lines = upcomingEvents.Concat(dueTasks).DefaultIfEmpty("No upcoming alarms.");
 
         MessageBox.Show(this, string.Join(Environment.NewLine, lines), "Alarms", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -1517,6 +1914,10 @@ public sealed partial class MainForm : Form
         CalendarEvent? selectedEvent = null;
         OrganizerTask? selectedTask = null;
 
+        // Use the instance-level UpdateAppointmentMenuItems so menu state is driven
+        // from the single authoritative _selectedCalendarEvent field. Planner-level
+        // code should keep the instance selection in sync.
+
         Button? dayViewButton = new() { Text = "Day", Width = 90 };
         Button? weekViewButton = new() { Text = "Week", Width = 90 };
         Button? monthViewButton = new() { Text = "Month", Width = 90 };
@@ -1538,20 +1939,32 @@ public sealed partial class MainForm : Form
         catch { }
         DateTime plannerDate = monthCalendar.SelectionStart.Date;
 
-        void RefreshCalendar()
+        // Core refresh implementation. When preserveSelection is true we avoid
+        // clearing the currently-selected appointment so callers can update flags
+        // while keeping menu state in-sync.
+        void RefreshCalendarCore(bool preserveSelection)
         {
-            selectedEvent = null;
-            selectedTask = null;
+            if(!preserveSelection)
+            {
+                selectedEvent = null;
+                selectedTask = null;
+                _selectedCalendarEvent = null;
+            }
+
             // Ensure planner respects the user's Week Starts preference each refresh
             try { planner.WeekStarts = ParseWeekStarts(_data); } catch { planner.WeekStarts = DayOfWeek.Sunday; }
             planner.SelectedDate = plannerDate;
             planner.ViewMode = viewMode;
+            // Keep the left-panel month calendar in sync with the planner's current date
+            try { monthCalendar.SetDate(plannerDate); } catch { try { monthCalendar.SelectionStart = plannerDate; } catch { } }
             // Populate events/tasks for the planner (convert to arrays for IReadOnlyList)
             planner.Events = GetCalendarEvents(plannerDate, viewMode).ToArray();
             planner.Tasks = GetCalendarTasks(plannerDate, viewMode).ToArray();
             // Force immediate repaint so changes appear right away
             planner.Refresh();
         }
+
+        void RefreshCalendar() => RefreshCalendarCore(false);
 
         _refreshCalendar = RefreshCalendar;
 
@@ -1588,8 +2001,15 @@ public sealed partial class MainForm : Form
             {
                 if(CreateAppointmentDialog.Edit(this, calendarEvent, "Edit Appointment", _data.Events))
                 {
-                    _store.Save(_data);
-                    RefreshCalendar();
+                    try { _store.Save(_data); } catch { }
+
+                    // Refresh underlying data and planner, then restore the selection so the
+                    // appointment menu items reflect the edited appointment immediately.
+                    RefreshCalendarCore(true);
+                    selectedEvent = calendarEvent;
+                    _selectedCalendarEvent = calendarEvent;
+                    UpdateAppointmentMenuItems();
+                    MainMenuStrip?.Refresh();
                 }
 
                 return;
@@ -1623,12 +2043,20 @@ public sealed partial class MainForm : Form
         {
             selectedEvent = calendarEvent;
             selectedTask = null;
+            // Keep the instance-level focused appointment in sync with planner selection.
+            _selectedCalendarEvent = calendarEvent;
+            UpdateAppointmentMenuItems();
+            MainMenuStrip?.Refresh();
         };
 
         planner.EventDoubleClicked += (_, calendarEvent) =>
         {
             selectedEvent = calendarEvent;
             selectedTask = null;
+            // Keep the instance-level focused appointment in sync before opening edit flow.
+            _selectedCalendarEvent = calendarEvent;
+            UpdateAppointmentMenuItems();
+            MainMenuStrip?.Refresh();
             EditSelectedCalendarEvent();
         };
 
@@ -1636,12 +2064,18 @@ public sealed partial class MainForm : Form
         {
             selectedEvent = null;
             selectedTask = task;
+            _selectedCalendarEvent = null;
+            UpdateAppointmentMenuItems();
+            MainMenuStrip?.Refresh();
         };
 
         planner.TaskDoubleClicked += (_, task) =>
         {
             selectedEvent = null;
             selectedTask = task;
+            _selectedCalendarEvent = null;
+            UpdateAppointmentMenuItems();
+            MainMenuStrip?.Refresh();
             EditSelectedCalendarEvent();
         };
 
@@ -1649,7 +2083,8 @@ public sealed partial class MainForm : Form
 
         addButton.Click += (_, _) =>
         {
-            DateTime date = monthCalendar.SelectionStart.Date;
+            // Prefer the planner's selected date (right-side calendar) when available, otherwise fall back to the left MonthCalendar selection
+            DateTime date = planner is not null ? planner.SelectedDate.Date : monthCalendar.SelectionStart.Date;
             CalendarEvent? calendarEvent = new() { Start = date.AddHours(9), End = date.AddHours(10) };
 
             if(CreateAppointmentDialog.Edit(this, calendarEvent, "Create Appointment", _data.Events))
@@ -1672,7 +2107,14 @@ public sealed partial class MainForm : Form
             RefreshCalendar();
         };
 
-        FlowLayoutPanel? buttonPanel = new() { Dock = DockStyle.Top, Height = 48, Padding = new Padding(8), FlowDirection = FlowDirection.LeftToRight, BackColor = Color.FromArgb(199, 156, 75) };
+        FlowLayoutPanel? buttonPanel = new()
+        {
+            Dock = DockStyle.Top,
+            Height = 48,
+            Padding = new Padding(8),
+            FlowDirection = FlowDirection.LeftToRight,
+            BackColor = Color.FromArgb(199, 156, 75)
+        };
 
         buttonPanel.Controls.AddRange([previousButton, nextButton]);
 
@@ -1685,6 +2127,41 @@ public sealed partial class MainForm : Form
         designerCalendarLeftPanel.Width = preferred.Width + 20; // 20px wider as requested
         monthCalendar.Dock = DockStyle.Top;
         designerCalendarLeftPanel.Controls.Add(buttonPanel);
+
+        // Ensure the binder toggle glyph is part of the left panel and placed above the month calendar
+        try
+        {
+            if(_binderToggleLabel is null)
+            {
+                _binderToggleLabel = new Label
+                {
+                    Text = _binderPanelCollapsed ? "\u25B6" : "\u25BC",
+                    Dock = DockStyle.Top,
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    Height = 24,
+                    Cursor = Cursors.Hand,
+                    BackColor = Color.Transparent,
+                    Padding = Padding.Empty,
+                    Margin = Padding.Empty,
+                    Font = new Font(SystemFonts.DefaultFont.FontFamily, SystemFonts.DefaultFont.SizeInPoints + 1.5f, FontStyle.Bold),
+                };
+
+                _binderToggleLabel.Click += (_, _) => ExecuteCommand("Collapse Binder Panel");
+            }
+
+            // Remove from any previous parent before re-adding
+            try
+            {
+                _binderToggleLabel.Parent?.Controls.Remove(_binderToggleLabel);
+            }
+            catch { }
+
+            // Add the glyph before the month calendar so it appears above it
+            designerCalendarLeftPanel.Controls.Add(_binderToggleLabel);
+            // We'll set child index after adding monthCalendar below if needed
+        }
+        catch { }
+
         designerCalendarLeftPanel.Controls.Add(monthCalendar);
 
         // Add clipboard and trash icons into an icons panel at the bottom of the left panel
@@ -1696,6 +2173,16 @@ public sealed partial class MainForm : Form
         if(trashTarget is not null) iconsPanel.Controls.Add(trashTarget);
 
         designerCalendarLeftPanel.Controls.Add(iconsPanel);
+
+        // Attach tooltips to the runtime navigation buttons and the glyph
+        try
+        {
+            if(_toolTip is null) _toolTip = new ToolTip { AutoPopDelay = 5000, InitialDelay = 300, ReshowDelay = 100, ShowAlways = true };
+            try { if(previousButton is not null) _toolTip.SetToolTip(previousButton, "Previous"); } catch { }
+            try { if(nextButton is not null) _toolTip.SetToolTip(nextButton, "Next"); } catch { }
+            try { if(_binderToggleLabel is not null) _toolTip.SetToolTip(_binderToggleLabel, "Collapse/Expand binder panel"); } catch { }
+        }
+        catch { }
 
         Panel rightPanel = new() { Dock = DockStyle.Fill, Padding = new Padding(8), BackColor = Color.FromArgb(178, 134, 61) };
 
@@ -1723,10 +2210,19 @@ public sealed partial class MainForm : Form
     {
         return viewMode switch
         {
-            CalendarViewMode.Day => _data.Tasks.Where(task => TaskOccursInRange(task, selectedDate.Date, selectedDate.Date.AddDays(1))).OrderBy(TaskPriority).ThenBy(task => task.Completed).ThenBy(task => task.Title),
-            CalendarViewMode.Week => _data.Tasks.Where(task => TaskOccursInRange(task, StartOfWeek(selectedDate), StartOfWeek(selectedDate).AddDays(7))).OrderBy(TaskPriority).ThenBy(task => task.Completed).ThenBy(task => task.Title),
-            CalendarViewMode.Month => _data.Tasks.Where(task => TaskOccursInRange(task, new DateTime(selectedDate.Year, selectedDate.Month, 1), new DateTime(selectedDate.Year, selectedDate.Month, 1).AddMonths(1))).OrderBy(TaskPriority).ThenBy(task => task.Completed).ThenBy(task => task.Title),
-            _ => _data.Tasks.OrderBy(TaskPriority).ThenBy(task => task.Completed).ThenBy(task => task.Title)
+            CalendarViewMode.Day => _data.Tasks.Where(task => TaskOccursInRange(task, selectedDate.Date, selectedDate.Date.AddDays(1)))
+            .OrderBy(TaskPriority)
+            .ThenBy(task => task.Completed).ThenBy(task => task.Title),
+            CalendarViewMode.Week => _data.Tasks.Where(task => TaskOccursInRange(task, StartOfWeek(selectedDate), StartOfWeek(selectedDate)
+            .AddDays(7))).OrderBy(TaskPriority)
+            .ThenBy(task => task.Completed)
+            .ThenBy(task => task.Title),
+            CalendarViewMode.Month => _data.Tasks.Where(task => TaskOccursInRange(task, new DateTime(selectedDate.Year, selectedDate.Month, 1), new DateTime(selectedDate.Year, selectedDate.Month, 1)
+            .AddMonths(1)))
+            .OrderBy(TaskPriority).ThenBy(task => task.Completed).ThenBy(task => task.Title),
+            _ => _data.Tasks.OrderBy(TaskPriority)
+            .ThenBy(task => task.Completed)
+            .ThenBy(task => task.Title)
         };
     }
 
@@ -1998,24 +2494,29 @@ public sealed partial class MainForm : Form
             tree.BeginUpdate();
             tree.Nodes.Clear();
 
-            var headings = _data.Notes
+            List<Note>? headings = _data.Notes
                 .Where(note => note.IsChapterHeading)
                 .OrderBy(note => note.SortOrder)
                 .ThenBy(note => note.Title)
                 .ToList();
 
-            foreach(var heading in headings)
+            foreach(Note heading in headings)
             {
-                var headingNode = CreateNoteNode(heading);
+                TreeNode? headingNode = CreateNoteNode(heading);
+
                 tree.Nodes.Add(headingNode);
 
-                foreach(var child in _data.Notes.Where(note => !note.IsChapterHeading && note.ParentHeadingId == heading.Id).OrderBy(note => note.SortOrder).ThenBy(note => note.Title))
+                foreach(Note child in _data.Notes.Where(note => !note.IsChapterHeading && note.ParentHeadingId == heading.Id)
+                    .OrderBy(note => note.SortOrder)
+                    .ThenBy(note => note.Title))
                 {
                     headingNode.Nodes.Add(CreateNoteNode(child));
                 }
             }
 
-            foreach(var note in _data.Notes.Where(note => !note.IsChapterHeading && note.ParentHeadingId is null).OrderBy(note => note.SortOrder).ThenBy(note => note.Title))
+            foreach(Note note in _data.Notes.Where(note => !note.IsChapterHeading && note.ParentHeadingId is null)
+                .OrderBy(note => note.SortOrder)
+                .ThenBy(note => note.Title))
             {
                 tree.Nodes.Add(CreateNoteNode(note));
             }

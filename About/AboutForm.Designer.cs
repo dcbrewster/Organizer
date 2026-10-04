@@ -69,7 +69,7 @@ partial class AboutForm
         // LinkWebsite
         // 
         LinkWebsite.AutoSize = true;
-        LinkWebsite.Location = new Point(358, 102);
+        LinkWebsite.Location = new Point(346, 102);
         LinkWebsite.Name = "LinkWebsite";
         LinkWebsite.Size = new Size(128, 15);
         LinkWebsite.TabIndex = 5;
@@ -80,12 +80,12 @@ partial class AboutForm
         // LinkEmail
         // 
         LinkEmail.AutoSize = true;
-        LinkEmail.Location = new Point(358, 132);
+        LinkEmail.Location = new Point(346, 132);
         LinkEmail.Name = "LinkEmail";
-        LinkEmail.Size = new Size(180, 15);
+        LinkEmail.Size = new Size(212, 15);
         LinkEmail.TabIndex = 6;
         LinkEmail.TabStop = true;
-        LinkEmail.Text = "support@forestcitysoftware.com";
+        LinkEmail.Text = "dave.brewster@forestcitysoftware.com";
         LinkEmail.LinkClicked += LinkEmail_LinkClicked;
         // 
         // btnClose

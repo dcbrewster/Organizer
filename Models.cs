@@ -63,6 +63,8 @@ public sealed class OrganizerPreferences
     // Scheduling identification
     public bool UseCurrentOrganizerFileToReceiveMessages { get; set; }
     public string OrganizerFilePath { get; set; } = string.Empty;
+    // Tracks recently used organizer file paths (most recent first)
+    public List<string> RecentFiles { get; set; } = new();
     public string SchedulingName { get; set; } = string.Empty;
     public string SchedulingEmail { get; set; } = string.Empty;
     public List<string> SchedulingForwardingAddresses { get; set; } = [];

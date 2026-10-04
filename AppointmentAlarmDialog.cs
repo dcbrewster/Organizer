@@ -2,7 +2,7 @@ using System.ComponentModel;
 
 namespace Organizer;
 
-public sealed partial class AppointmentAlarmDialog : Form
+public sealed partial class AppointmentAlarmDialog : DialogBase
 {
     private readonly CalendarEvent _appointment;
     private readonly DomainUpDown _amount = new() { ReadOnly = true, Width = 58, TextAlign = HorizontalAlignment.Right };
@@ -34,6 +34,9 @@ public sealed partial class AppointmentAlarmDialog : Form
 
         Controls.Clear();
         Text = "Alarm";
+        // Dialog behavior: modal dialog appearance without taskbar icon
+        ShowInTaskbar = false;
+        ShowIcon = false;
         Width = 520;
         Height = 292;
         StartPosition = FormStartPosition.CenterParent;
@@ -41,7 +44,7 @@ public sealed partial class AppointmentAlarmDialog : Form
         MaximizeBox = false;
         FormBorderStyle = FormBorderStyle.FixedDialog;
 
-        for(var value = 0; value <= 999; value += 5)
+        for(int value = 0; value <= 999; value += 5)
         {
             _amount.Items.Add(value.ToString());
         }
@@ -49,15 +52,15 @@ public sealed partial class AppointmentAlarmDialog : Form
         _unit.Items.AddRange(["Minutes", "Hours", "Days"]);
         _tune.Items.AddRange(["Default", "Chime", "Ding", "Notify"]);
 
-        var body = new Panel
+        Panel? body = new Panel
         {
             Dock = DockStyle.Fill,
             Padding = new Padding(12)
         };
 
-        var playButton = new Button { Text = "Play", Width = 82 };
-        var browseButton = new Button { Text = "Bro&wse...", Width = 82 };
-        var runBrowseButton = new Button { Text = "&Browse...", Width = 82 };
+        Button? playButton = new() { Text = "Play", Width = 82 };
+        Button? browseButton = new() { Text = "Bro&wse...", Width = 82 };
+        Button? runBrowseButton = new() { Text = "&Browse...", Width = 82 };
         playButton.Click += (_, _) => System.Media.SystemSounds.Asterisk.Play();
         browseButton.Click += (_, _) => ShowNotImplemented("Browse alarm tune");
         runBrowseButton.Click += (_, _) => ShowNotImplemented("Browse run command");
@@ -94,13 +97,13 @@ public sealed partial class AppointmentAlarmDialog : Form
         _on.Location = new Point(392, 190);
         body.Controls.AddRange([_setAlarm, _cancelAlarm, _appointmentTime, _before, _after, _on]);
 
-        var okButton = new Button { Text = "OK", DialogResult = DialogResult.OK, Width = 82 };
-        var cancelButton = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 82 };
-        var helpButton = new Button { Text = "&Help", Width = 82 };
+        Button? okButton = new() { Text = "OK", DialogResult = DialogResult.OK, Width = 82 };
+        Button? cancelButton = new() { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 82 };
+        Button? helpButton = new() { Text = "&Help", Width = 82 };
         okButton.Click += (_, _) => SaveValues();
         helpButton.Click += (_, _) => ShowNotImplemented("Help");
 
-        var buttons = new FlowLayoutPanel
+        FlowLayoutPanel? buttons = new()
         {
             Dock = DockStyle.Right,
             Width = 100,
@@ -108,6 +111,7 @@ public sealed partial class AppointmentAlarmDialog : Form
             FlowDirection = FlowDirection.TopDown,
             WrapContents = false
         };
+
         buttons.Controls.AddRange([okButton, cancelButton, helpButton]);
 
         AcceptButton = okButton;
@@ -119,7 +123,7 @@ public sealed partial class AppointmentAlarmDialog : Form
 
     public static bool Edit(IWin32Window owner, CalendarEvent appointment)
     {
-        using var dialog = new AppointmentAlarmDialog(appointment);
+        using AppointmentAlarmDialog? dialog = new(appointment);
 
         return dialog.ShowDialog(owner) == DialogResult.OK;
     }
@@ -156,7 +160,12 @@ public sealed partial class AppointmentAlarmDialog : Form
         _appointment.AlarmDisplayDialog = _displayDialog.Checked;
     }
 
-    private static void AddLabel(Control parent, string text, int x, int y) => parent.Controls.Add(new Label { Text = text, AutoSize = true, Location = new Point(x, y) });
+    private static void AddLabel(Control parent, string text, int x, int y) => parent.Controls.Add(new Label
+    {
+        Text = text,
+        AutoSize = true,
+        Location = new Point(x, y)
+    });
 
     private static void SelectItem(ComboBox control, string value)
     {
@@ -164,11 +173,17 @@ public sealed partial class AppointmentAlarmDialog : Form
         control.SelectedIndex = index >= 0 ? index : 0;
     }
 
-    private static void SelectItem(DomainUpDown control, string value)
-    {
-        var index = control.Items.Cast<object>().Select(item => item.ToString() ?? string.Empty).ToList().FindIndex(item => item.Equals(value, StringComparison.OrdinalIgnoreCase));
-        control.SelectedIndex = index >= 0 ? index : 0;
-    }
+    /// <summary>
+    /// Selects the item in a DomainUpDown control that matches the specified value, ignoring case.
+    /// If no match is found, selects the first item (index 0).
+    /// </summary>
+    /// <param name="control">The DomainUpDown control.</param>
+    /// <param name="value">The value to select.</param>
+    private static void SelectItem(DomainUpDown control, string value) => control.SelectedIndex = control.Items.Cast<object>().Select(item => item.ToString() ?? string.Empty).ToList().FindIndex(item => item.Equals(value, StringComparison.OrdinalIgnoreCase)) >= 0 ? control.Items.Cast<object>().Select(item => item.ToString() ?? string.Empty).ToList().FindIndex(item => item.Equals(value, StringComparison.OrdinalIgnoreCase)) : 0;
 
+    /// <summary>
+    /// Displays a message box indicating that the specified command is not yet implemented.
+    /// </summary>
+    /// <param name="commandText">The text of the command that is not yet implemented.</param>
     private void ShowNotImplemented(string commandText) => MessageBox.Show(this, $"{commandText} is not yet implemented.", "Not Yet Implemented", MessageBoxButtons.OK, MessageBoxIcon.Information);
 }

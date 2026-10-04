@@ -3,7 +3,7 @@ using System.Text;
 
 namespace Organizer;
 
-public sealed partial class CreateAppointmentDialog : Form
+public sealed partial class CreateAppointmentDialog : DialogBase
 {
     private readonly CalendarEvent _appointment;
     private readonly IReadOnlyCollection<CalendarEvent> _allAppointments;
@@ -53,6 +53,9 @@ public sealed partial class CreateAppointmentDialog : Form
         Width = 560;
         Height = 330;
         StartPosition = FormStartPosition.CenterParent;
+        // Dialog behavior: modal dialog appearance without taskbar icon
+        ShowInTaskbar = false;
+        ShowIcon = false;
         MinimizeBox = false;
         MaximizeBox = false;
         FormBorderStyle = FormBorderStyle.FixedDialog;

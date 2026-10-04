@@ -1,10 +1,13 @@
 namespace Organizer;
 
-internal sealed partial class PrinterSetupDialog : Form
+internal sealed partial class PrinterSetupDialog : DialogBase
 {
     public PrinterSetupDialog()
     {
         InitializeComponent();
+        // Dialog behavior: do not show icon or appear in the taskbar
+        ShowInTaskbar = false;
+        ShowIcon = false;
     }
 
     // Optional convenience constructor used by reflective wrapper if a preferences object is available.

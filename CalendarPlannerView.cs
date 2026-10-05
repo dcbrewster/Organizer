@@ -7,12 +7,16 @@ internal sealed class CalendarPlannerView : Control
 {
     private const int TimeGutter = 0;
     private const int DayHeaderHeight = 28;
-    private readonly Dictionary<Rectangle, CalendarEvent> _eventBounds = [];
-    private readonly Dictionary<Rectangle, OrganizerTask> _taskBounds = [];
+    private readonly Dictionary<Rectangle, CalendarEvent> _eventBounds = new();
+    private readonly Dictionary<Rectangle, OrganizerTask> _taskBounds = new();
     private readonly Font _smallFont;
     private readonly Font _boldFont;
     private CalendarEvent? _selectedEvent;
     private OrganizerTask? _selectedTask;
+
+    // True when the user has explicitly selected a date (via mouse). When false,
+    // only DateTime.Today will be highlighted.
+    private bool _hasUserDateSelection;
 
     public CalendarPlannerView()
     {
@@ -24,21 +28,135 @@ internal sealed class CalendarPlannerView : Control
         SetStyle(ControlStyles.ResizeRedraw, true);
     }
 
+    private void DrawYear(Graphics g, Rectangle content, Brush headerBrush, Pen borderPen, Pen lightPen)
+    {
+        int cols = 3, rows = 4;
+        int gap = 8;
+        int cellW = Math.Max(1, content.Width / cols);
+        int cellH = Math.Max(1, content.Height / rows);
+
+        for(int i = 0; i < 12; i++)
+        {
+            int col = i % cols;
+            int row = i / cols;
+            Rectangle cell = new(content.Left + col * cellW + gap / 2, content.Top + row * cellH + gap / 2, cellW - gap, cellH - gap);
+
+            using SolidBrush paper = new(Color.FromArgb(255, 253, 239));
+            g.FillRectangle(paper, cell);
+            g.DrawRectangle(borderPen, cell);
+
+            DateTime monthDate = new(SelectedDate.Year, i + 1, 1);
+            string title = monthDate.ToString("MMMM yyyy", CultureInfo.CurrentCulture);
+            TextRenderer.DrawText(g, title, _boldFont, new Rectangle(cell.Left + 4, cell.Top + 2, cell.Width - 8, 20), Color.FromArgb(30, 30, 30), TextFormatFlags.Left | TextFormatFlags.Top);
+
+            DrawMiniMonth(g, monthDate, new Rectangle(cell.Left + 4, cell.Top + 22, cell.Width - 8, cell.Height - 26), lightPen);
+        }
+    }
+
+    private void DrawMiniMonth(Graphics g, DateTime month, Rectangle area, Pen lightPen)
+    {
+        const int dayHeaderHeight = 16;
+        DateTime first = new(month.Year, month.Month, 1);
+        DateTime firstVisible = StartOfWeek(first);
+        DateTime last = new(month.Year, month.Month, DateTime.DaysInMonth(month.Year, month.Month));
+        DateTime lastVisible = StartOfWeek(last).AddDays(6);
+        int weeks = Math.Max(1, (int)((lastVisible - firstVisible).TotalDays + 1) / 7);
+        int colW = Math.Max(1, area.Width / 7);
+        int rowH = Math.Max(1, (area.Height - dayHeaderHeight) / weeks);
+
+        for(int c = 0; c < 7; c++)
+        {
+            string d = CultureInfo.CurrentCulture.DateTimeFormat.AbbreviatedDayNames[(c + (int)WeekStarts) % 7];
+            Rectangle hdr = new(area.Left + c * colW, area.Top, colW, dayHeaderHeight);
+            TextRenderer.DrawText(g, d.Substring(0, 1), _smallFont, hdr, ForeColor, TextFormatFlags.Right | TextFormatFlags.VerticalCenter);
+        }
+
+        for(int r = 0; r < weeks; r++)
+        {
+            for(int c = 0; c < 7; c++)
+            {
+                int dayIndex = r * 7 + c;
+                DateTime d = firstVisible.AddDays(dayIndex);
+                Rectangle cell = new(area.Left + c * colW, area.Top + dayHeaderHeight + r * rowH, colW, rowH);
+                // Only show days that belong to the requested month. Skip cells that
+                // fall in the previous/next month so the mini-month displays only
+                // the current month's days.
+                if(d.Month != month.Month)
+                {
+                    continue;
+                }
+
+                Color txt = ForeColor;
+
+                // Only highlight the selected date when the user explicitly selected a date.
+                // Otherwise, highlight only DateTime.Today.
+                if(_hasUserDateSelection)
+                {
+                    if(d.Date == SelectedDate.Date)
+                    {
+                        using SolidBrush selectedBrush = new(Color.FromArgb(92, 125, 176));
+                        g.FillRectangle(selectedBrush, cell);
+                        txt = Color.White;
+                    }
+                }
+                else
+                {
+                    if(d.Date == DateTime.Today)
+                    {
+                        using SolidBrush selectedBrush = new(Color.FromArgb(92, 125, 176));
+                        g.FillRectangle(selectedBrush, cell);
+                        txt = Color.White;
+                    }
+                }
+
+                TextRenderer.DrawText(g, d.Day.ToString(CultureInfo.CurrentCulture), _smallFont, Rectangle.Inflate(cell, -2, -1), txt, TextFormatFlags.Right | TextFormatFlags.Top);
+            }
+        }
+    }
+
+    private DateTime _selectedDate = DateTime.Today;
+
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public DateTime SelectedDate { get; set; } = DateTime.Today;
+    public DateTime SelectedDate
+    {
+        get => _selectedDate;
+        set
+        {
+            // When SelectedDate is set programmatically, treat it as NOT a user selection
+            // so the control will only highlight DateTime.Today unless the user clicks.
+            _selectedDate = value.Date;
+            _hasUserDateSelection = false;
+        }
+    }
 
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public CalendarViewMode ViewMode { get; set; } = CalendarViewMode.Day;
 
+    // Extra view parameters for variants
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public IReadOnlyList<CalendarEvent> Events { get; set; } = [];
+    [DefaultValue(1)]
+    public int DaysToShow { get; set; } = 1; // 1 = single day, 2 = two-day, etc.
 
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public IReadOnlyList<OrganizerTask> Tasks { get; set; } = [];
+    [DefaultValue(false)]
+    public bool ShowWorkWeekOnly { get; set; } = false; // when true, week views show Mon-Fri only
+
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    [DefaultValue(60)]
+    public int TimeSlotMinutes { get; set; } = 60; // granularity in minutes for Weekly Time Slot view
+
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public IReadOnlyList<CalendarEvent> Events { get; set; } = Array.Empty<CalendarEvent>();
+
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public IReadOnlyList<OrganizerTask> Tasks { get; set; } = Array.Empty<OrganizerTask>();
 
     public event EventHandler<CalendarEvent>? EventSelected;
 
@@ -71,9 +189,13 @@ internal sealed class CalendarPlannerView : Control
         if(!hit)
         {
             DateTime? date = GetDateAt(e.Location);
+
             if(date is not null)
             {
                 SelectedDate = date.Value.Date;
+                // Mark that the user explicitly selected a date so it will be highlighted
+                // instead of the default Today highlight.
+                _hasUserDateSelection = true;
                 Invalidate();
             }
         }
@@ -83,6 +205,7 @@ internal sealed class CalendarPlannerView : Control
     private DateTime? GetDateAt(Point location)
     {
         Rectangle page = ClientRectangle;
+
         page.Inflate(-4, -4);
 
         if(page.Width <= 0 || page.Height <= 0) return null;
@@ -91,47 +214,83 @@ internal sealed class CalendarPlannerView : Control
 
         switch(ViewMode)
         {
+            case CalendarViewMode.Year:
+                {
+                    // layout: 3 columns x 4 rows of months
+                    int cols = 3, rows = 4;
+                    int gap = 8;
+                    int cellW = Math.Max(1, content.Width / cols);
+                    int cellH = Math.Max(1, content.Height / rows);
+                    int col = Math.Clamp((location.X - content.Left) / (cellW == 0 ? 1 : cellW), 0, cols - 1);
+                    int row = Math.Clamp((location.Y - content.Top) / (cellH == 0 ? 1 : cellH), 0, rows - 1);
+                    int monthIndex = row * cols + col + 1;
+
+                    Rectangle cell = new(content.Left + col * cellW + gap / 2, content.Top + row * cellH + gap / 2, cellW - gap, cellH - gap);
+                    Rectangle title = new(cell.Left, cell.Top, cell.Width, 26);
+                    Rectangle grid = new(cell.Left, title.Bottom, cell.Width, cell.Height - title.Height);
+                    const int dayHeaderHeight = 20;
+
+                    if(location.Y < grid.Top + dayHeaderHeight || location.Y > grid.Bottom) return null;
+
+                    DateTime first = new(SelectedDate.Year, monthIndex, 1);
+                    DateTime firstVisible = StartOfWeek(first);
+                    DateTime last = new(SelectedDate.Year, monthIndex, DateTime.DaysInMonth(SelectedDate.Year, monthIndex));
+                    DateTime lastVisible = StartOfWeek(last).AddDays(6);
+                    int weeks = Math.Max(1, (int)((lastVisible - firstVisible).TotalDays + 1) / 7);
+
+                    int colWidth = grid.Width / 7;
+                    int rowHeight = Math.Max(1, (grid.Height - dayHeaderHeight) / weeks);
+                    int c = Math.Clamp((location.X - grid.Left) / (colWidth == 0 ? 1 : colWidth), 0, 6);
+                    int r = Math.Clamp((location.Y - (grid.Top + dayHeaderHeight)) / (rowHeight == 0 ? 1 : rowHeight), 0, weeks - 1);
+
+                    DateTime day = firstVisible.AddDays(r * 7 + c);
+                    return day.Date;
+                }
+
             case CalendarViewMode.Month:
-            {
-                Rectangle title = new(content.Left, content.Top, content.Width, 36);
-                Rectangle grid = new(content.Left, title.Bottom, content.Width, content.Height - title.Height);
-                const int dayHeaderHeight = 26;
+                {
+                    Rectangle title = new(content.Left, content.Top, content.Width, 36);
+                    Rectangle grid = new(content.Left, title.Bottom, content.Width, content.Height - title.Height);
+                    const int dayHeaderHeight = 26;
 
-                DateTime first = new(SelectedDate.Year, SelectedDate.Month, 1);
-                DateTime firstVisible = StartOfWeek(first);
-                DateTime last = new(SelectedDate.Year, SelectedDate.Month, DateTime.DaysInMonth(SelectedDate.Year, SelectedDate.Month));
-                DateTime lastVisible = StartOfWeek(last).AddDays(6);
-                int weeks = Math.Max(1, (int)((lastVisible - firstVisible).TotalDays + 1) / 7);
+                    DateTime first = new(SelectedDate.Year, SelectedDate.Month, 1);
+                    DateTime firstVisible = StartOfWeek(first);
+                    DateTime last = new(SelectedDate.Year, SelectedDate.Month, DateTime.DaysInMonth(SelectedDate.Year, SelectedDate.Month));
+                    DateTime lastVisible = StartOfWeek(last).AddDays(6);
+                    int weeks = Math.Max(1, (int)((lastVisible - firstVisible).TotalDays + 1) / 7);
 
-                if(location.Y < grid.Top + dayHeaderHeight || location.Y > grid.Bottom) return null;
+                    if(location.Y < grid.Top + dayHeaderHeight || location.Y > grid.Bottom) return null;
 
-                int colWidth = grid.Width / 7;
-                int col = Math.Clamp((location.X - grid.Left) / (colWidth == 0 ? 1 : colWidth), 0, 6);
-                int rowHeight = Math.Max(1, (grid.Height - dayHeaderHeight) / weeks);
-                int row = Math.Clamp((location.Y - (grid.Top + dayHeaderHeight)) / (rowHeight == 0 ? 1 : rowHeight), 0, weeks - 1);
+                    int colWidth = grid.Width / 7;
+                    int col = Math.Clamp((location.X - grid.Left) / (colWidth == 0 ? 1 : colWidth), 0, 6);
+                    int rowHeight = Math.Max(1, (grid.Height - dayHeaderHeight) / weeks);
+                    int row = Math.Clamp((location.Y - (grid.Top + dayHeaderHeight)) / (rowHeight == 0 ? 1 : rowHeight), 0, weeks - 1);
 
-                DateTime day = firstVisible.AddDays(row * 7 + col);
-                return day.Date;
-            }
+                    DateTime day = firstVisible.AddDays(row * 7 + col);
+                    return day.Date;
+                }
 
             case CalendarViewMode.Week:
-            {
-                Rectangle title = new(content.Left, content.Top, content.Width, 32);
-                Rectangle body = new(content.Left, title.Bottom, content.Width, content.Height - title.Height);
-                int dayCount = 7;
-                int columnWidth = Math.Max(1, (body.Width - TimeGutter) / dayCount);
-                int x = location.X - (body.Left + TimeGutter);
-                if(location.Y < body.Top || location.Y > body.Bottom) return null;
-                int dayIndex = Math.Clamp(x / columnWidth, 0, dayCount - 1);
-                DateTime start = StartOfWeek(SelectedDate);
-                return start.AddDays(dayIndex).Date;
-            }
+                {
+                    Rectangle title = new(content.Left, content.Top, content.Width, 32);
+                    Rectangle body = new(content.Left, title.Bottom, content.Width, content.Height - title.Height);
+                    const int dayCount = 7;
+                    int columnWidth = Math.Max(1, (body.Width - TimeGutter) / dayCount);
+                    int x = location.X - (body.Left + TimeGutter);
+
+                    if(location.Y < body.Top || location.Y > body.Bottom) return null;
+
+                    int dayIndex = Math.Clamp(x / columnWidth, 0, dayCount - 1);
+                    DateTime start = StartOfWeek(SelectedDate);
+
+                    return start.AddDays(dayIndex).Date;
+                }
 
             default: // Day view
-            {
-                // Day view represents a single date
-                return SelectedDate.Date;
-            }
+                {
+                    // Day view represents a single date
+                    return SelectedDate.Date;
+                }
         }
     }
 
@@ -164,6 +323,7 @@ internal sealed class CalendarPlannerView : Control
         using SolidBrush? paperBrush = new(Color.FromArgb(255, 253, 239));
 
         Rectangle page = ClientRectangle;
+
         // Reduce outer page padding so the calendar uses more available space
         page.Inflate(-4, -4);
 
@@ -177,12 +337,20 @@ internal sealed class CalendarPlannerView : Control
 
         switch(ViewMode)
         {
+            case CalendarViewMode.TwoDay:
+            case CalendarViewMode.WorkWeek:
+            case CalendarViewMode.WeekPerPage:
+            case CalendarViewMode.WeeklyTimeSlot:
             case CalendarViewMode.Week:
                 DrawWeek(e.Graphics, content, headerBrush, borderPen, lightPen);
                 break;
 
             case CalendarViewMode.Month:
                 DrawMonth(e.Graphics, content, headerBrush, borderPen, lightPen);
+                break;
+
+            case CalendarViewMode.Year:
+                DrawYear(e.Graphics, content, headerBrush, borderPen, lightPen);
                 break;
 
             default:
@@ -242,7 +410,17 @@ internal sealed class CalendarPlannerView : Control
     private void DrawWeek(Graphics graphics, Rectangle bounds, Brush headerBrush, Pen borderPen, Pen lightPen)
     {
         DateTime start = StartOfWeek(SelectedDate);
-        DateTime[]? days = Enumerable.Range(0, 7).Select(dayOffset => start.AddDays(dayOffset)).ToArray();
+        int totalDays = ViewMode == CalendarViewMode.TwoDay ? Math.Max(1, DaysToShow) : 7;
+
+        // When showing workweek, use Monday..Friday
+        if(ShowWorkWeekOnly && ViewMode != CalendarViewMode.TwoDay)
+        {
+            totalDays = 5;
+            // Ensure start is a Monday
+            while(start.DayOfWeek != DayOfWeek.Monday) start = start.AddDays(1);
+        }
+
+        DateTime[]? days = Enumerable.Range(0, totalDays).Select(dayOffset => start.AddDays(dayOffset)).ToArray();
         Rectangle title = new(bounds.Left, bounds.Top, bounds.Width, 32);
 
         graphics.FillRectangle(headerBrush, title);
@@ -252,7 +430,7 @@ internal sealed class CalendarPlannerView : Control
         Rectangle body = new(bounds.Left, title.Bottom, bounds.Width, bounds.Height - title.Height);
         Rectangle timeGrid = new(body.Left, body.Top, body.Width, body.Height);
 
-        DrawTimeGrid(graphics, timeGrid, 7, days, lightPen, borderPen);
+        DrawTimeGrid(graphics, timeGrid, days.Length, days, lightPen, borderPen);
         DrawCalendarItems(graphics, timeGrid, days);
     }
 
@@ -308,7 +486,11 @@ internal sealed class CalendarPlannerView : Control
 
                 TextRenderer.DrawText(graphics, day.Day.ToString(), inMonth ? _boldFont : _smallFont, new Rectangle(cell.Left + 4, cell.Top + 3, cell.Width - 8, 18), inMonth ? ForeColor : Color.Gray, TextFormatFlags.Left);
 
-                List<OrganizerTask>? tasks = Tasks.Where(task => TaskOccursOnDate(task, day.Date)).OrderBy(TaskPriority).ThenBy(task => task.Completed).ThenBy(task => task.Title).Take(4).ToList();
+                List<OrganizerTask>? tasks = Tasks.Where(task => TaskOccursOnDate(task, day.Date))
+                    .OrderBy(TaskPriority)
+                    .ThenBy(task => task.Completed)
+                    .ThenBy(task => task.Title)
+                    .Take(4).ToList();
                 List<CalendarEvent>? events = Events.Where(calendarEvent => calendarEvent.Start.Date == day.Date).OrderBy(calendarEvent => calendarEvent.Start).Take(4 - tasks.Count).ToList();
                 int y = cell.Top + 24;
 
@@ -349,7 +531,16 @@ internal sealed class CalendarPlannerView : Control
             int width = dayIndex == dayCount - 1 ? body.Right - x : columnWidth;
             Rectangle header = new(x, body.Top, width, DayHeaderHeight);
 
-            TextRenderer.DrawText(graphics, dayCount == 1 ? "Appointments" : days[dayIndex].ToString("ddd M/d"), _boldFont, header, ForeColor, TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter);
+            var headerText = dayCount == 1 ? "Appointments" : days[dayIndex].ToString("ddd M/d");
+
+            // If we are in the WeeklyTimeSlot view and a finer timeslot is requested,
+            // indicate the slot granularity in the header for clarity.
+            if(TimeSlotMinutes < 60 && (ViewMode == CalendarViewMode.WeeklyTimeSlot))
+            {
+                headerText += " (" + TimeSlotMinutes + "m)";
+            }
+
+            TextRenderer.DrawText(graphics, headerText, _boldFont, header, ForeColor, TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter);
         }
     }
 
@@ -399,6 +590,7 @@ internal sealed class CalendarPlannerView : Control
         bool selected = ReferenceEquals(calendarEvent, _selectedEvent);
         using SolidBrush? fill = new(selected ? Color.FromArgb(92, 125, 176) : Color.FromArgb(255, 244, 190));
         using Pen? border = new(selected ? Color.FromArgb(72, 92, 115) : Color.FromArgb(178, 128, 42));
+
         graphics.FillRectangle(fill, bounds);
         graphics.DrawRectangle(border, bounds);
         _eventBounds[bounds] = calendarEvent;
@@ -420,11 +612,12 @@ internal sealed class CalendarPlannerView : Control
     {
         using Pen? pencil = new(selected ? Color.White : Color.FromArgb(155, 111, 0), 2f);
         using Pen? outline = new(selected ? Color.FromArgb(230, 230, 230) : Color.FromArgb(72, 48, 24));
+
         graphics.DrawLine(pencil, bounds.Left + 2, bounds.Bottom - 3, bounds.Right - 3, bounds.Top + 2);
         graphics.DrawLine(outline, bounds.Left + 1, bounds.Bottom - 2, bounds.Right - 2, bounds.Top + 1);
         graphics.FillPolygon(
             selected ? Brushes.White : Brushes.Bisque,
-            [new Point(bounds.Right - 3, bounds.Top + 2), new Point(bounds.Right, bounds.Top), new Point(bounds.Right - 1, bounds.Top + 4)]);
+            [new(bounds.Right - 3, bounds.Top + 2), new Point(bounds.Right, bounds.Top), new Point(bounds.Right - 1, bounds.Top + 4)]);
     }
 
     private void DrawTaskBlock(Graphics graphics, Rectangle bounds, OrganizerTask task)
@@ -434,6 +627,7 @@ internal sealed class CalendarPlannerView : Control
         bool selected = ReferenceEquals(task, _selectedTask);
         using SolidBrush? fill = new(selected ? Color.FromArgb(91, 139, 74) : task.Completed ? Color.FromArgb(220, 226, 205) : Color.FromArgb(218, 238, 196));
         using Pen? border = new(selected ? Color.FromArgb(42, 89, 35) : Color.FromArgb(95, 137, 67));
+
         graphics.FillRectangle(fill, bounds);
         graphics.DrawRectangle(border, bounds);
         _taskBounds[bounds] = task;

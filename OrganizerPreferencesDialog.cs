@@ -145,7 +145,7 @@ public sealed partial class OrganizerPreferencesDialog : DialogBase
 
         ListBox? sounds = new() { Height = 70 };
 
-        sounds.Items.AddRange(["Appointment alarm", "Task alarm", "Page turn", "Error"]);
+        sounds.Items.AddRange(new object[] { "Appointment alarm", "Task alarm", "Page turn", "Error" });
         body.Controls.Add(Sized(sounds));
         body.Controls.Add(ButtonRow(Button("Pla&y", () => System.Media.SystemSounds.Asterisk.Play()), Button("S&top"), Button("So&unds...")));
         body.Controls.Add(_muteOrganizerSounds);

@@ -6,11 +6,11 @@ namespace Organizer;
 /// </summary>
 public sealed class OrganizerData
 {
-    public List<CalendarEvent> Events { get; set; } = [];
-    public List<Contact> Contacts { get; set; } = [];
-    public List<OrganizerTask> Tasks { get; set; } = [];
-    public List<Note> Notes { get; set; } = [];
-    public List<Anniversary> Anniversaries { get; set; } = [];
+    public List<CalendarEvent> Events { get; set; } = new List<CalendarEvent>();
+    public List<Contact> Contacts { get; set; } = new List<Contact>();
+    public List<OrganizerTask> Tasks { get; set; } = new List<OrganizerTask>();
+    public List<Note> Notes { get; set; } = new List<Note>();
+    public List<Anniversary> Anniversaries { get; set; } = new List<Anniversary>();
     public OrganizerPreferences Preferences { get; set; } = new();
 }
 
@@ -48,36 +48,47 @@ public sealed class OrganizerPreferences
     public int MarginRight { get; set; } = 100;
     public int MarginTop { get; set; } = 100;
     public int MarginBottom { get; set; } = 100;
+
     // UI state persistence
     public string LastSection { get; set; } = "Calendar";
+
     public string LastCalendarView { get; set; } = "Day";
 
     // Mail & scheduling preferences
     public string MailProgram { get; set; } = "Microsoft Outlook";
+
     public string MailProtocol { get; set; } = "POP3";
+
     // Mail tab
     public string MailDefaultFrom { get; set; } = string.Empty;
+
     public string MailSignature { get; set; } = string.Empty;
 
     // Legacy scheduling & mail fields captured from org6.exe
     // Scheduling identification
     public bool UseCurrentOrganizerFileToReceiveMessages { get; set; }
+
     public string OrganizerFilePath { get; set; } = string.Empty;
+
     // Tracks recently used organizer file paths (most recent first)
     public List<string> RecentFiles { get; set; } = new();
+
     public string SchedulingName { get; set; } = string.Empty;
     public string SchedulingEmail { get; set; } = string.Empty;
-    public List<string> SchedulingForwardingAddresses { get; set; } = [];
+    public List<string> SchedulingForwardingAddresses { get; set; } = new List<string>();
 
     // Connections tab
     public int CheckInboxEveryMinutes { get; set; } = 0;
+
     // FavoriteAlarmTune already exists above as FavoriteAlarmTune
     public DateTime LastMeetingNoticeDate { get; set; } = DateTime.MinValue;
+
     public bool RequestConfirmationBeforeProcessingNotices { get; set; }
     public bool DeleteNoticesFromInboxAfterRetrieval { get; set; }
 
     // Auto-process flags
     public bool AutoProcessChairAcceptances { get; set; }
+
     public bool AutoProcessChairDeclines { get; set; }
     public bool AutoProcessChairWithMessages { get; set; }
     public bool AutoProcessInviteeInvitations { get; set; }
@@ -88,21 +99,24 @@ public sealed class OrganizerPreferences
 
     // Scheduling tab
     public bool SendMeetingRequests { get; set; } = true;
+
     public int DefaultReminderMinutes { get; set; } = 15;
     public int DefaultMeetingLengthMinutes { get; set; } = 60;
 
     // Connections tab
     public string MailServer { get; set; } = string.Empty;
+
     public int MailServerPort { get; set; } = 110;
     public string MailUsername { get; set; } = string.Empty;
     public string MailPassword { get; set; } = string.Empty;
     public bool MailUseSsl { get; set; }
 
     // Auto-process tab
-    public List<string> AutoProcessRules { get; set; } = [];
+    public List<string> AutoProcessRules { get; set; } = new List<string>();
 
     // Busy time tab
     public bool PublishBusyTime { get; set; }
+
     public string BusyTimePublishUrl { get; set; } = string.Empty;
 }
 

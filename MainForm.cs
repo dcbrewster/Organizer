@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using System.Drawing.Printing;
-using System.Linq;
 using System.Text;
 using Organizer.About;
 
@@ -90,12 +89,11 @@ public sealed partial class MainForm : Form
 
     private static DayOfWeek ParseWeekStarts(OrganizerData? data)
     {
-        if(data?.Preferences is not null && !string.IsNullOrWhiteSpace(data.Preferences.WeekStartsOn))
+        if(data?.Preferences is not null
+            && !string.IsNullOrWhiteSpace(data.Preferences.WeekStartsOn)
+            && Enum.TryParse<DayOfWeek>(data.Preferences.WeekStartsOn, true, out var day))
         {
-            if(Enum.TryParse<DayOfWeek>(data.Preferences.WeekStartsOn, true, out var day))
-            {
-                return day;
-            }
+            return day;
         }
 
         return DayOfWeek.Sunday;
@@ -160,22 +158,32 @@ public sealed partial class MainForm : Form
                                 {
                                     foreach(Control c in designerCalendarLeftPanel.Controls)
                                     {
-                                        if(object.ReferenceEquals(c, _binderToggleLabel)) { c.Visible = true; continue; }
+                                        if(object.ReferenceEquals(c, _binderToggleLabel))
+                                        {
+                                            c.Visible = true;
+                                            continue;
+                                        }
+
                                         c.Visible = false;
                                     }
                                 }
                                 catch { }
 
                                 // Tighten minimum size to the glyph width
-                                try { if(_binderToggleLabel is not null) designerCalendarLeftPanel.MinimumSize = new Size(Math.Max(24, _binderToggleLabel.Width + 8), 0); } catch { }
+                                try
+                                {
+                                    if(_binderToggleLabel is not null) designerCalendarLeftPanel.MinimumSize = new Size(Math.Max(24, _binderToggleLabel.Width + 8), 0);
+                                }
+                                catch { }
+
                                 _binderPanelCollapsed = true;
                             }
 
                             // Update view/menu/glyph after animation finishes
                             try
                             {
-                                if(_collapseBinderPanelMenuItem is not null) _collapseBinderPanelMenuItem.Text = _binderPanelCollapsed ? "Expand Binder Panel\tF12" : "Collapse Binder Panel\tF12";
-                                if(_binderToggleLabel is not null) _binderToggleLabel.Text = _binderPanelCollapsed ? "\u25B6" : "\u25BC";
+                                _collapseBinderPanelMenuItem?.Text = _binderPanelCollapsed ? "Expand Binder Panel\tF12" : "Collapse Binder Panel\tF12";
+                                _binderToggleLabel?.Text = _binderPanelCollapsed ? "\u25B6" : "\u25BC";
                             }
                             catch { }
 
@@ -190,6 +198,7 @@ public sealed partial class MainForm : Form
                         int diff = target - current;
                         int step = Math.Max(1, Math.Abs(diff) / 6);
                         int next = current + Math.Sign(diff) * step;
+
                         // Clamp to target
                         if((diff > 0 && next > target) || (diff < 0 && next < target)) next = target;
 
@@ -204,7 +213,11 @@ public sealed partial class MainForm : Form
             _binderAnimationAnimating = true;
 
             // Ensure layout does not prevent the animation: relax minimum size before animating
-            try { designerCalendarLeftPanel.MinimumSize = new Size(0, 0); } catch { }
+            try
+            {
+                designerCalendarLeftPanel.MinimumSize = new Size(0, 0);
+            }
+            catch { }
 
             _binderAnimationTimer.Start();
         }
@@ -274,10 +287,12 @@ public sealed partial class MainForm : Form
         // Restore last selected section if present
         try
         {
-            var last = _data.Preferences?.LastSection;
+            string? last = _data.Preferences?.LastSection;
+
             if(!string.IsNullOrWhiteSpace(last))
             {
                 int idx = _tabs.TabPages.Cast<TabPage>().ToList().FindIndex(tp => string.Equals(tp.Text, last, StringComparison.OrdinalIgnoreCase));
+
                 if(idx >= 0) _tabs.SelectedIndex = idx;
             }
         }
@@ -290,7 +305,8 @@ public sealed partial class MainForm : Form
             {
                 try
                 {
-                    var txt = _tabs.SelectedTab?.Text;
+                    string? txt = _tabs.SelectedTab?.Text;
+
                     if(!string.IsNullOrWhiteSpace(txt)) { _data.Preferences.LastSection = txt; _store.Save(_data); }
                 }
                 catch { }
@@ -303,6 +319,7 @@ public sealed partial class MainForm : Form
 
         // Create a content container so the left panel and tabs dock correctly
         Panel content = new() { Dock = DockStyle.Fill };
+
         // Add the tab control first, then the left panel so docking/z-order doesn't allow the left panel to overlap the Fill area
         content.Controls.Add(_tabs);
         content.Controls.Add(designerCalendarLeftPanel);
@@ -312,6 +329,7 @@ public sealed partial class MainForm : Form
         {
             // Narrow the left binder panel to 220px as requested
             const int leftPanelWidth = 220;
+
             designerCalendarLeftPanel.MinimumSize = new Size(leftPanelWidth, 0);
             designerCalendarLeftPanel.Width = leftPanelWidth;
             _binderPanelLastWidth = leftPanelWidth;
@@ -334,13 +352,19 @@ public sealed partial class MainForm : Form
                 _tabs.Invalidate();
             }
             catch { }
-            // Note: glyph and runtime tooltips are created in BuildCalendarTab after the left panel is populated
         }
         catch { }
 
         // Now that tabs have been created, build the main menu so the "Turn To" submenu
         // can be populated from the actual tab pages.
-        try { menuStrip = BuildMainMenu(); } catch { menuStrip = null; }
+        try
+        {
+            menuStrip = BuildMainMenu();
+        }
+        catch
+        {
+            menuStrip = null;
+        }
 
         Controls.Add(content);
         Controls.Add(iconLine);
@@ -438,6 +462,7 @@ public sealed partial class MainForm : Form
             {
                 // Record current visibility for later restore but don't hide them immediately; hiding will occur when animation completes to avoid layout side-effects.
                 _leftPanelChildVisibility = new Dictionary<Control, bool>();
+
                 foreach(Control c in designerCalendarLeftPanel.Controls)
                 {
                     if(object.ReferenceEquals(c, _binderToggleLabel))
@@ -461,6 +486,7 @@ public sealed partial class MainForm : Form
         {
             // Start expand: animate back to saved width, will restore children at end
             int restoreWidth = _binderPanelLastWidth > 0 ? _binderPanelLastWidth : 260;
+
             StartBinderAnimation(restoreWidth, expanding: true);
         }
 
@@ -476,13 +502,10 @@ public sealed partial class MainForm : Form
     {
         try
         {
-            var left = designerCalendarLeftPanel;
-            var month = designerMonthCalendar;
+            Panel? left = designerCalendarLeftPanel;
+            MonthCalendar? month = designerMonthCalendar;
 
-            if(left is null || month is null)
-            {
-                return;
-            }
+            if(left is null || month is null) return;
 
             Rectangle leftBounds = left.Bounds;
             Rectangle leftClient = left.ClientRectangle;
@@ -502,7 +525,7 @@ public sealed partial class MainForm : Form
     {
         Bitmap? bitmap = new(24, 24);
 
-        using var graphics = Graphics.FromImage(bitmap);
+        using Graphics? graphics = Graphics.FromImage(bitmap);
         graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.None;
         graphics.Clear(Color.Magenta);
 
@@ -589,7 +612,7 @@ public sealed partial class MainForm : Form
 
         graphics.FillRectangle(paper, x, y, width, height);
         graphics.DrawRectangle(pen, x, y, width, height);
-        graphics.FillPolygon(fold, [new Point(x + width - 5, y), new Point(x + width, y + 5), new Point(x + width - 5, y + 5)]);
+        graphics.FillPolygon(fold, [new(x + width - 5, y), new Point(x + width, y + 5), new Point(x + width - 5, y + 5)]);
         graphics.DrawLine(pen, x + 3, y + 8, x + width - 3, y + 8);
         graphics.DrawLine(pen, x + 3, y + 12, x + width - 3, y + 12);
     }
@@ -729,6 +752,7 @@ public sealed partial class MainForm : Form
     private static void DrawPlus(Graphics graphics)
     {
         using SolidBrush? brush = new(Color.ForestGreen);
+
         graphics.FillRectangle(brush, 10, 4, 5, 16);
         graphics.FillRectangle(brush, 4, 10, 17, 5);
     }
@@ -771,25 +795,28 @@ public sealed partial class MainForm : Form
 
         // Build the Turn To submenu items from the current tabs so the menu reflects runtime sections.
         ToolStripItem[] turnToItems;
+
         try
         {
-            var _turnToListAll = new List<ToolStripItem>();
+            List<ToolStripItem>? _turnToListAll = [];
+
             if(_tabs is not null)
             {
                 foreach(TabPage tp in _tabs.TabPages)
                 {
-                    try { _turnToListAll.Add(Command(tp.Text, "Turn To " + tp.Text)); } catch { }
+                    try
+                    {
+                        _turnToListAll.Add(Command(tp.Text, "Turn To " + tp.Text));
+                    }
+                    catch { }
                 }
             }
 
             const int maxVisible = 10;
-            var visibleList = _turnToListAll.Take(maxVisible).ToList();
+            List<ToolStripItem>? visibleList = _turnToListAll.Take(maxVisible).ToList();
 
             // Only show the "More sections..." entry when there are more than maxVisible sections
-            if(_turnToListAll.Count > maxVisible)
-            {
-                visibleList.Add(Command("&More sections..."));
-            }
+            if(_turnToListAll.Count > maxVisible) visibleList.Add(Command("&More sections..."));
 
             // Fallback to at least the More entry if nothing was discovered
             if(visibleList.Count == 0) visibleList.Add(Command("&More sections..."));
@@ -803,9 +830,11 @@ public sealed partial class MainForm : Form
 
         // Build the Entry In submenu items dynamically from the current tabs.
         ToolStripItem[] entryInItems;
+
         try
         {
-            var _entryInAll = new List<ToolStripItem>();
+            List<ToolStripItem>? _entryInAll = [];
+
             if(_tabs is not null)
             {
                 foreach(TabPage tp in _tabs.TabPages)
@@ -815,13 +844,9 @@ public sealed partial class MainForm : Form
             }
 
             const int maxVisibleEntry = 10;
-            var visibleEntry = _entryInAll.Take(maxVisibleEntry).ToList();
+            List<ToolStripItem>? visibleEntry = _entryInAll.Take(maxVisibleEntry).ToList();
 
-            if(_entryInAll.Count > maxVisibleEntry)
-            {
-                visibleEntry.Add(Command("&More sections..."));
-            }
-
+            if(_entryInAll.Count > maxVisibleEntry) visibleEntry.Add(Command("&More sections..."));
             if(visibleEntry.Count == 0) visibleEntry.Add(Command("&More sections..."));
 
             entryInItems = visibleEntry.ToArray();
@@ -835,12 +860,13 @@ public sealed partial class MainForm : Form
         _collapseBinderPanelMenuItem = Command("Collapse Bi&nder Panel\tF12");
 
         // Build appointment menu separately so we can update its DropDownOpening before display
-        var appointmentMenu = BuildMenu("&Appointment", new ToolStripItem[] {
+        ToolStripMenuItem? appointmentMenu = BuildMenu("&Appointment", new ToolStripItem[] {
             Command("&Categorize...\tF5"),
             Command("A&larm...\tF6"),
             Command("&Repeat...\tF7"),
             Command("C&ost...\tF8"),
             Separator(),
+
             // Create explicit references so we can update checked/enabled state when an appointment is focused
             (_warnOfConflictsMenuItem = CreateMenuItemFromText("&Warn Of Conflicts", "Warn Of Conflicts", false)),
             (_pencilInMenuItem = CreateMenuItemFromText("&Pencil in", "Pencil in", false)),
@@ -849,25 +875,25 @@ public sealed partial class MainForm : Form
 
         // Build recent files menu items (bottom of File menu)
         ToolStripItem[] recentFileItems;
+
         try
         {
-            var recent = new List<ToolStripItem>();
-            var recentPaths = _data?.Preferences?.RecentFiles ?? new List<string>();
+            List<ToolStripItem>? recent = [];
+            List<string>? recentPaths = _data?.Preferences?.RecentFiles ?? new List<string>();
+
             foreach(var path in recentPaths.Take(10))
             {
                 try
                 {
-                    var item = CreateMenuItemFromText(path, "OpenRecent:" + path);
+                    ToolStripMenuItem? item = CreateMenuItemFromText(path, "OpenRecent:" + path);
+
                     item.ToolTipText = path;
                     recent.Add(item);
                 }
                 catch { }
             }
 
-            if(recent.Count == 0)
-            {
-                recent.Add(Command("(No recent files)"));
-            }
+            if(recent.Count == 0) recent.Add(Command("(No recent files)"));
 
             recentFileItems = recent.ToArray();
         }
@@ -877,7 +903,7 @@ public sealed partial class MainForm : Form
         }
 
         // Build File menu children and append recent items
-        var fileChildren = new List<ToolStripItem>() {
+        List<ToolStripItem>? fileChildren = new List<ToolStripItem>() {
             Command("&New\tCtrl+N"),
             Command("&Open\tCtrl+O"),
             Command("&Close\tCtrl+W"),
@@ -940,7 +966,7 @@ public sealed partial class MainForm : Form
             BuildMenu("&View", new ToolStripItem[] {
                 Command("&1 Day Planner"),
                 Command("&2 Day per Page"),
-                Command("&3 Multiple Calendar"),
+                // 3 Multiple Calendar intentionally skipped for now
                 Command("&4 Work Week"),
                 Command("&5 Week per Page"),
                 Command("&6 Weekly Time Slot"),
@@ -1002,9 +1028,7 @@ public sealed partial class MainForm : Form
 
         // Wire up click handlers for appointment menu items so they toggle the focused appointment
         // and persist the change immediately.
-        if(_warnOfConflictsMenuItem is not null)
-        {
-            _warnOfConflictsMenuItem.Click += (_, _) =>
+        _warnOfConflictsMenuItem?.Click += (_, _) =>
             {
                 if(_selectedCalendarEvent is CalendarEvent ev)
                 {
@@ -1019,8 +1043,7 @@ public sealed partial class MainForm : Form
                     UpdateAppointmentMenuItems();
                     _refreshCalendar();
                 }
-                };
-        }
+            };
 
         _pencilInMenuItem?.Click += (_, _) =>
             {
@@ -1062,7 +1085,7 @@ public sealed partial class MainForm : Form
         return menu;
     }
 
-    private ToolStripMenuItem BuildMenu(string text, ToolStripItem[] children)
+    private static ToolStripMenuItem BuildMenu(string text, ToolStripItem[] children)
     {
         ToolStripMenuItem? menuItem = new(text);
 
@@ -1071,15 +1094,9 @@ public sealed partial class MainForm : Form
         return menuItem;
     }
 
-    private ToolStripMenuItem Command(string text)
-    {
-        return CreateMenuItemFromText(text, text);
-    }
+    private ToolStripMenuItem Command(string text) => CreateMenuItemFromText(text, text);
 
-    private ToolStripMenuItem Command(string text, string commandKey)
-    {
-        return CreateMenuItemFromText(text, commandKey);
-    }
+    private ToolStripMenuItem Command(string text, string commandKey) => CreateMenuItemFromText(text, commandKey);
 
     // Helper that parses menu text for an optional '\t' separated shortcut (e.g. "&New\tCtrl+N").
     // If a shortcut is present it is assigned to ShortcutKeys so the renderer places it at the
@@ -1090,6 +1107,7 @@ public sealed partial class MainForm : Form
         string? shortcutText = null;
 
         int tabIndex = text.IndexOf('\t');
+
         if(tabIndex >= 0)
         {
             displayText = text.Substring(0, tabIndex);
@@ -1097,10 +1115,8 @@ public sealed partial class MainForm : Form
         }
 
         ToolStripMenuItem menuItem = new(displayText);
-        if(attachExecuteCommand)
-        {
-            menuItem.Click += (_, _) => ExecuteCommand(commandKey);
-        }
+
+        if(attachExecuteCommand) menuItem.Click += (_, _) => ExecuteCommand(commandKey);
 
         if(!string.IsNullOrEmpty(shortcutText))
         {
@@ -1108,11 +1124,12 @@ public sealed partial class MainForm : Form
             {
                 // Normalize common alias tokens used in the menu specifications (e.g. Ins -> Insert)
                 string normalized = shortcutText!.Trim();
+
                 normalized = normalized.Replace("Ins", "Insert", StringComparison.OrdinalIgnoreCase);
                 normalized = normalized.Replace("Del", "Delete", StringComparison.OrdinalIgnoreCase);
                 normalized = normalized.Replace("Ctrl+", "Control+", StringComparison.OrdinalIgnoreCase);
 
-                var keys = (Keys)TypeDescriptor.GetConverter(typeof(Keys)).ConvertFromString(normalized)!;
+                Keys keys = (Keys)TypeDescriptor.GetConverter(typeof(Keys)).ConvertFromString(normalized)!;
                 menuItem.ShortcutKeys = keys;
                 menuItem.ShowShortcutKeys = true;
             }
@@ -1202,7 +1219,8 @@ public sealed partial class MainForm : Form
             case string s when s.StartsWith("Turn To ", StringComparison.OrdinalIgnoreCase):
                 try
                 {
-                    var sectionName = s.Substring("Turn To ".Length);
+                    string? sectionName = s.Substring("Turn To ".Length);
+
                     SelectSection(sectionName);
                 }
                 catch { }
@@ -1213,7 +1231,8 @@ public sealed partial class MainForm : Form
             case string s when s.StartsWith("OpenRecent:", StringComparison.OrdinalIgnoreCase):
                 try
                 {
-                    var path = s.Substring("OpenRecent:".Length);
+                    string? path = s.Substring("OpenRecent:".Length);
+
                     if(File.Exists(path))
                     {
                         LoadData(_store.LoadFrom(path));
@@ -1230,17 +1249,41 @@ public sealed partial class MainForm : Form
                 return true;
 
             case "1 Day Planner":
-            case "2 Day per Page":
                 SelectSection("Calendar");
+                // single day
+                _planner!.DaysToShow = 1;
+                _planner!.ShowWorkWeekOnly = false;
                 _setCalendarView(CalendarViewMode.Day);
                 return true;
 
-            case "3 Multiple Calendar":
+            case "2 Day per Page":
+                SelectSection("Calendar");
+                // two-day span
+                _planner!.DaysToShow = 2;
+                _planner!.ShowWorkWeekOnly = false;
+                _setCalendarView(CalendarViewMode.TwoDay);
+                return true;
+
             case "4 Work Week":
+                SelectSection("Calendar");
+                _planner!.DaysToShow = 5;
+                _planner!.ShowWorkWeekOnly = true;
+                _setCalendarView(CalendarViewMode.WorkWeek);
+                return true;
+
             case "5 Week per Page":
+                SelectSection("Calendar");
+                _planner!.DaysToShow = 7;
+                _planner!.ShowWorkWeekOnly = false;
+                _setCalendarView(CalendarViewMode.WeekPerPage);
+                return true;
+
             case "6 Weekly Time Slot":
                 SelectSection("Calendar");
-                _setCalendarView(CalendarViewMode.Week);
+                _planner!.TimeSlotMinutes = 30; // make slots smaller for this mode
+                _planner!.DaysToShow = 7;
+                _planner!.ShowWorkWeekOnly = false;
+                _setCalendarView(CalendarViewMode.WeeklyTimeSlot);
                 return true;
 
             case "7 Month":
@@ -1250,7 +1293,7 @@ public sealed partial class MainForm : Form
 
             case "8 Year":
                 SelectSection("Calendar");
-                ShowNotImplemented("Year view");
+                _setCalendarView(CalendarViewMode.Year);
                 return true;
 
             case "Appointment":
@@ -1334,22 +1377,20 @@ public sealed partial class MainForm : Form
             // Apply changed preferences to the calendar and force an immediate redraw
             try
             {
-                var planner = _tabs.TabPages
+                CalendarPlannerView? planner = _tabs.TabPages
                     .Cast<TabPage>()
                     .SelectMany(p => p.Controls.OfType<CalendarPlannerView>())
                     .FirstOrDefault();
 
-                var weekStarts = ParseWeekStarts(_data);
+                DayOfWeek weekStarts = ParseWeekStarts(_data);
 
-                if(planner is not null)
-                {
-                    planner.WeekStarts = weekStarts;
-                }
+                planner?.WeekStarts = weekStarts;
 
                 // Also update the left-panel MonthCalendar (the runtime one added by BuildCalendarTab) so it reflects the new preference
                 try
                 {
-                    var leftMonth = designerCalendarLeftPanel?.Controls.OfType<MonthCalendar>().FirstOrDefault();
+                    MonthCalendar? leftMonth = designerCalendarLeftPanel?.Controls.OfType<MonthCalendar>().FirstOrDefault();
+
                     if(leftMonth is not null)
                     {
                         leftMonth.FirstDayOfWeek = ConvertToWinFormsDay(weekStarts);
@@ -1358,7 +1399,12 @@ public sealed partial class MainForm : Form
                     else
                     {
                         // Fallback: update designer-created control if present
-                        try { designerMonthCalendar.FirstDayOfWeek = ConvertToWinFormsDay(weekStarts); designerMonthCalendar.Invalidate(); } catch { }
+                        try
+                        {
+                            designerMonthCalendar.FirstDayOfWeek = ConvertToWinFormsDay(weekStarts);
+                            designerMonthCalendar.Invalidate();
+                        }
+                        catch { }
                     }
                 }
                 catch { }
@@ -1406,11 +1452,20 @@ public sealed partial class MainForm : Form
         {
             using PrintDialog pd = new() { UseEXDialog = true };
             // Preselect the saved printer if available
-            try { if(!string.IsNullOrWhiteSpace(_data.Preferences.PrinterName)) pd.PrinterSettings.PrinterName = _data.Preferences.PrinterName; } catch { }
+            try
+            {
+                if(!string.IsNullOrWhiteSpace(_data.Preferences.PrinterName)) pd.PrinterSettings.PrinterName = _data.Preferences.PrinterName;
+            }
+            catch { }
 
             if(pd.ShowDialog(this) == DialogResult.OK)
             {
-                try { _data.Preferences.PrinterName = pd.PrinterSettings.PrinterName ?? string.Empty; } catch { }
+                try
+                {
+                    _data.Preferences.PrinterName = pd.PrinterSettings.PrinterName ?? string.Empty;
+                }
+                catch { }
+
                 _store.Save(_data);
             }
 
@@ -1420,7 +1475,11 @@ public sealed partial class MainForm : Form
         catch
         {
             // Fallback to custom dialog if the standard dialogs are unavailable
-            try { if(PrinterSetupDialog.Edit(this, _data.Preferences)) _store.Save(_data); } catch { }
+            try
+            {
+                if(PrinterSetupDialog.Edit(this, _data.Preferences)) _store.Save(_data);
+            }
+            catch { }
         }
     }
 
@@ -1433,7 +1492,8 @@ public sealed partial class MainForm : Form
             // Sync any changed preferences back into the main form's data and persist
             try
             {
-                var prefs = ProgramData.Instance.Data.Preferences;
+                OrganizerPreferences? prefs = ProgramData.Instance.Data.Preferences;
+
                 if(prefs is not null && _data?.Preferences is not null)
                 {
                     _data.Preferences.MailProgram = prefs.MailProgram;
@@ -1474,7 +1534,7 @@ public sealed partial class MainForm : Form
 
     private void OpenOrganizer()
     {
-        using var dialog = new OpenFileDialog
+        using OpenFileDialog? dialog = new()
         {
             Title = "Open Organizer File",
             Filter = "Organizer data (*.json)|*.json|All files (*.*)|*.*",
@@ -1503,7 +1563,11 @@ public sealed partial class MainForm : Form
         {
             _store.SaveTo(_data, dialog.FileName);
             _currentFilePath = dialog.FileName;
-            try { AddToRecentFiles(dialog.FileName); } catch { }
+            try
+            {
+                AddToRecentFiles(dialog.FileName);
+            }
+            catch { }
         }
     }
 
@@ -1541,11 +1605,11 @@ public sealed partial class MainForm : Form
 
     private void AddToRecentFiles(string path)
     {
-        if (string.IsNullOrWhiteSpace(path)) return;
+        if(string.IsNullOrWhiteSpace(path)) return;
 
         try
         {
-            var prefs = _data.Preferences ??= new OrganizerPreferences();
+            OrganizerPreferences? prefs = _data.Preferences ??= new OrganizerPreferences();
 
             // Remove any existing case-insensitive duplicate
             prefs.RecentFiles.RemoveAll(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
@@ -1554,12 +1618,13 @@ public sealed partial class MainForm : Form
             prefs.RecentFiles.Insert(0, path);
 
             // Trim to 10 entries
-            if (prefs.RecentFiles.Count > 10)
-            {
-                prefs.RecentFiles.RemoveRange(10, prefs.RecentFiles.Count - 10);
-            }
+            if(prefs.RecentFiles.Count > 10) prefs.RecentFiles.RemoveRange(10, prefs.RecentFiles.Count - 10);
 
-            try { _store.Save(_data); } catch { }
+            try
+            {
+                _store.Save(_data);
+            }
+            catch { }
         }
         catch { }
     }
@@ -1939,6 +2004,12 @@ public sealed partial class MainForm : Form
         catch { }
         DateTime plannerDate = monthCalendar.SelectionStart.Date;
 
+        // Preserved year-strip widths so RefreshCalendarCore can restore columns
+        // even when the runtime controls are not yet created or have been
+        // collapsed to width 0 by other views.
+        int leftYearStripWidth = 48;
+        int rightYearStripWidth = 48;
+
         // Core refresh implementation. When preserveSelection is true we avoid
         // clearing the currently-selected appointment so callers can update flags
         // while keeping menu state in-sync.
@@ -1955,6 +2026,72 @@ public sealed partial class MainForm : Form
             try { planner.WeekStarts = ParseWeekStarts(_data); } catch { planner.WeekStarts = DayOfWeek.Sunday; }
             planner.SelectedDate = plannerDate;
             planner.ViewMode = viewMode;
+
+            // Year-strip panels are only visible in Year view. Find the right-side panel and show/hide strips accordingly.
+            try
+            {
+                Panel? rightPanelFound = null;
+
+                foreach(Control c in page.Controls)
+                {
+                    if(c is Panel p && p.Name == "calendarRightPanel")
+                    {
+                        rightPanelFound = p;
+                        break;
+                    }
+                }
+
+                if(rightPanelFound is not null)
+                {
+                    FlowLayoutPanel? leftStrip = null;
+                    FlowLayoutPanel? rightStrip = null;
+
+                    // Controls may be nested inside a TableLayoutPanel. Use recursive lookup
+                    // to find the year strip panels by name so visibility can be toggled reliably.
+                    try
+                    {
+                        Control[] foundLeft = rightPanelFound.Controls.Find("yearLeftStrip", true);
+                        if(foundLeft.Length > 0 && foundLeft[0] is FlowLayoutPanel lf) leftStrip = lf;
+                    }
+                    catch { }
+
+                    try
+                    {
+                        Control[] foundRight = rightPanelFound.Controls.Find("yearRightStrip", true);
+                        if(foundRight.Length > 0 && foundRight[0] is FlowLayoutPanel rf) rightStrip = rf;
+                    }
+                    catch { }
+
+                    bool showStrips = viewMode == CalendarViewMode.Year;
+
+                    // Toggle visibility and also collapse the TableLayoutPanel columns
+                    try { if(leftStrip is not null) leftStrip.Visible = showStrips; } catch { }
+                    try { if(rightStrip is not null) rightStrip.Visible = showStrips; } catch { }
+
+                    try
+                    {
+                        // If the right panel contains the calendar layout, adjust its column widths
+                        var calendarLayout = rightPanelFound.Controls.OfType<TableLayoutPanel>().FirstOrDefault();
+                        if(calendarLayout is not null)
+                        {
+                            // Ensure there are at least 3 columns
+                            if(calendarLayout.ColumnCount >= 3)
+                            {
+                                // Use the preserved configured widths when showing; otherwise collapse to 0.
+                                // Reading the control's Width may return 0 if the column was previously
+                                // collapsed, so rely on the saved values captured at creation time.
+                                int leftWidth = showStrips ? leftYearStripWidth : 0;
+                                int rightWidth = showStrips ? rightYearStripWidth : 0;
+
+                                calendarLayout.ColumnStyles[0] = new ColumnStyle(SizeType.Absolute, leftWidth);
+                                calendarLayout.ColumnStyles[2] = new ColumnStyle(SizeType.Absolute, rightWidth);
+                            }
+                        }
+                    }
+                    catch { }
+                }
+            }
+            catch { }
             // Keep the left-panel month calendar in sync with the planner's current date
             try { monthCalendar.SetDate(plannerDate); } catch { try { monthCalendar.SelectionStart = plannerDate; } catch { } }
             // Populate events/tasks for the planner (convert to arrays for IReadOnlyList)
@@ -2116,7 +2253,7 @@ public sealed partial class MainForm : Form
             BackColor = Color.FromArgb(199, 156, 75)
         };
 
-        buttonPanel.Controls.AddRange([previousButton, nextButton]);
+        buttonPanel.Controls.AddRange(new Control[] { previousButton, nextButton });
 
         Control? trashDropTarget = BuildTrashDropTarget();
 
@@ -2174,19 +2311,265 @@ public sealed partial class MainForm : Form
 
         designerCalendarLeftPanel.Controls.Add(iconsPanel);
 
-        // Attach tooltips to the runtime navigation buttons and the glyph
+        // Prepare the right panel that will host the planner and the year tabs strip
+        // Use a neutral background so the year tab strips don't appear brown.
+        Panel rightPanel = new() { Name = "calendarRightPanel", Dock = DockStyle.Fill, Padding = Padding.Empty, BackColor = Color.White };
+
+        // Year tabs: previous years on the left edge inside rightPanel, future years on a right-side strip
+        FlowLayoutPanel? leftYearsPanel = null;
+        FlowLayoutPanel? rightYearsPanel = null;
+
+        // Preserve the default strip widths so they can be restored reliably when
+        // switching back to Year view even if the runtime controls' Width becomes 0
+        // after collapsing the TableLayoutPanel columns in other views.
+
         try
         {
-            if(_toolTip is null) _toolTip = new ToolTip { AutoPopDelay = 5000, InitialDelay = 300, ReshowDelay = 100, ShowAlways = true };
-            try { if(previousButton is not null) _toolTip.SetToolTip(previousButton, "Previous"); } catch { }
-            try { if(nextButton is not null) _toolTip.SetToolTip(nextButton, "Next"); } catch { }
-            try { if(_binderToggleLabel is not null) _toolTip.SetToolTip(_binderToggleLabel, "Collapse/Expand binder panel"); } catch { }
+            leftYearsPanel = new()
+            {
+                Name = "yearLeftStrip",
+                Dock = DockStyle.Left,
+                Width = 48,
+                FlowDirection = FlowDirection.TopDown,
+                Padding = Padding.Empty,
+                Margin = new Padding(12, 0, 0, 0),
+                BackColor = Color.White,
+                AutoSize = false,
+            };
+
+            // We'll create the right strip next and capture both configured widths
+            // after both controls exist. This avoids reading rightYearsPanel.Width
+            // before it is initialized (which caused a NullReferenceException).
+
+            rightYearsPanel = new()
+            {
+                Name = "yearRightStrip",
+                Dock = DockStyle.Right,
+                Width = 48,
+                FlowDirection = FlowDirection.TopDown,
+                Padding = Padding.Empty,
+                Margin = Padding.Empty,
+                AutoSize = false,
+                BackColor = Color.White,
+            };
+
+            // Capture the configured widths (use the explicit Width values rather
+            // than reading the control's Width later, which may become 0 when the
+            // TableLayoutPanel column is collapsed). These values are used when
+            // restoring the Year view layout.
+            try { leftYearStripWidth = leftYearsPanel.Width; } catch { }
+            try { rightYearStripWidth = rightYearsPanel.Width; } catch { }
+
+            // Only show the year tabs when the planner starts in Year view.
+            try
+            {
+                bool showStripsInitially = viewMode == CalendarViewMode.Year;
+                leftYearsPanel?.Visible = showStripsInitially;
+                rightYearsPanel?.Visible = showStripsInitially;
+            }
+            catch { }
+
+            // Rebuild both strips for the decade that contains selectedYear.
+            void PopulateYearPanels(int selectedYear)
+            {
+                int decadeStart = (selectedYear / 10) * 10;
+                int yearOffset = selectedYear - decadeStart;
+
+                leftYearsPanel.Controls.Clear();
+                rightYearsPanel.Controls.Clear();
+
+                Label? prevDecade = new()
+                {
+                    // show first year of the previous decade (last-two-digit format)
+                    Text = ((decadeStart - 10) % 100).ToString("D2"),
+                    Width = 24,
+                    Height = 28,
+                    // Right-align the text so tabs appear justified to the inner edge
+                    TextAlign = ContentAlignment.MiddleRight,
+                    Cursor = Cursors.Hand,
+                    BorderStyle = BorderStyle.FixedSingle,
+                    // spacing will be adjusted after creation
+                    Margin = new Padding(0, 1, 0, 1),
+                    BackColor = Color.White,
+                    ForeColor = Color.Black,
+                };
+
+                prevDecade.Click += (_, _) =>
+                {
+                    try
+                    {
+                        // Jump to the first year of the previous decade
+                        int targetYear = decadeStart - 10;
+
+                        plannerDate = new DateTime(targetYear, plannerDate.Month, Math.Min(plannerDate.Day, DateTime.DaysInMonth(targetYear, plannerDate.Month)));
+                        PopulateYearPanels(targetYear);
+                        RefreshCalendar();
+                    }
+                    catch { }
+                };
+
+                leftYearsPanel.Controls.Add(prevDecade);
+
+                for(int i = 0; i < 10; i++)
+                {
+                    int year = decadeStart + i;
+                    Label? lbl = new()
+                    {
+                        // Show only the last two digits of the year on the tab (e.g. 1999 -> "99", 2005 -> "05")
+                        Text = (year % 100).ToString("D2"),
+                        Width = 24,
+                        Height = 28,
+                        // default alignment will be set when added to left/right strip
+                        TextAlign = ContentAlignment.MiddleCenter,
+                        Cursor = Cursors.Hand,
+                        BorderStyle = BorderStyle.FixedSingle,
+                        Margin = new Padding(0, 1, 0, 1),
+                        BackColor = Color.White,
+                        ForeColor = Color.Black,
+                    };
+
+                    // Ensure the label can show two digits reliably
+                    try
+                    {
+                        lbl.AutoSize = false;
+
+                        int required = TextRenderer.MeasureText("00", lbl.Font).Width + 8;
+
+                        lbl.Width = Math.Max(lbl.Width, required);
+
+                        // Align text depending on whether this tab goes in the left or right strip
+                        if(year <= selectedYear)
+                        {
+                            // Right-align text for left strip
+                            lbl.TextAlign = ContentAlignment.MiddleRight;
+                            lbl.Padding = new Padding(0, 0, 4, 0);
+                        }
+                        else
+                        {
+                            // Left-align text for right strip
+                            lbl.TextAlign = ContentAlignment.MiddleLeft;
+                            lbl.Padding = new Padding(4, 0, 0, 0);
+                        }
+                    }
+                    catch { }
+
+                    // Remove extra spacing between tabs and planner by ensuring zero left/right margins
+                    lbl.Margin = new Padding(0, lbl.Margin.Top, 0, lbl.Margin.Bottom);
+
+                    // highlight the currently-selected year
+                    if(year == selectedYear)
+                    {
+                        lbl.Font = new Font(lbl.Font, FontStyle.Bold);
+                        lbl.BackColor = Color.LightSteelBlue;
+                    }
+
+                    lbl.Click += (_, _) =>
+                    {
+                        try
+                        {
+                            // Update the plannerDate used by RefreshCalendarCore, then refresh UI
+                            plannerDate = new DateTime(year, plannerDate.Month, Math.Min(plannerDate.Day, DateTime.DaysInMonth(year, plannerDate.Month)));
+                            PopulateYearPanels(year);
+                            RefreshCalendar();
+                        }
+                        catch { }
+                    };
+
+                    if(year <= selectedYear) leftYearsPanel.Controls.Add(lbl);
+                    else rightYearsPanel.Controls.Add(lbl);
+                }
+
+                Label? nextDecade = new()
+                {
+                    // show first year of the next decade (last-two-digit format)
+                    Text = ((decadeStart + 10) % 100).ToString("D2"),
+                    Width = 24,
+                    Height = 28,
+                    TextAlign = ContentAlignment.MiddleLeft,
+                    Cursor = Cursors.Hand,
+                    BorderStyle = BorderStyle.FixedSingle,
+                    Margin = new Padding(0, 1, 0, 1),
+                    BackColor = Color.White,
+                    ForeColor = Color.Black,
+                };
+
+                nextDecade.Click += (_, _) =>
+                {
+                    try
+                    {
+                        // Jump to the first year of the next decade
+                        int targetYear = decadeStart + 10;
+
+                        plannerDate = new DateTime(targetYear, plannerDate.Month, Math.Min(plannerDate.Day, DateTime.DaysInMonth(targetYear, plannerDate.Month)));
+                        PopulateYearPanels(targetYear);
+                        RefreshCalendar();
+                    }
+                    catch { }
+                };
+
+                // Next-decade tab goes at the bottom of the right strip.
+                rightYearsPanel.Controls.Add(nextDecade);
+            }
+
+            // Populate the strips for the initial date
+            PopulateYearPanels(plannerDate.Year);
         }
         catch { }
 
-        Panel rightPanel = new() { Dock = DockStyle.Fill, Padding = new Padding(8), BackColor = Color.FromArgb(178, 134, 61) };
+        // Attach tooltips to the runtime navigation buttons and the glyph
+        try
+        {
+            _toolTip ??= new ToolTip { AutoPopDelay = 5000, InitialDelay = 300, ReshowDelay = 100, ShowAlways = true };
+            try
+            {
+                if(previousButton is not null) _toolTip.SetToolTip(previousButton, "Previous");
+            }
+            catch { }
 
-        rightPanel.Controls.Add(planner);
+            try
+            {
+                if(nextButton is not null) _toolTip.SetToolTip(nextButton, "Next");
+            }
+            catch { }
+
+            try
+            {
+                if(_binderToggleLabel is not null) _toolTip.SetToolTip(_binderToggleLabel, "Collapse/Expand binder panel");
+            }
+            catch { }
+        }
+        catch { }
+
+        // Use a three-column TableLayoutPanel so the left/right year strips and planner never overlap.
+        TableLayoutPanel? calendarLayout = new() { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
+        // Use the preserved strip widths if the runtime panels aren't available to avoid
+        // NullReferenceException or restoring zero widths when controls have been collapsed.
+        int leftColWidth = (leftYearsPanel is not null) ? leftYearsPanel.Width : leftYearStripWidth;
+        int rightColWidth = (rightYearsPanel is not null) ? rightYearsPanel.Width : rightYearStripWidth;
+
+        calendarLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, leftColWidth));
+        calendarLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        calendarLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, rightColWidth));
+
+        try
+        {
+            if(leftYearsPanel is not null) calendarLayout.Controls.Add(leftYearsPanel, 0, 0);
+        }
+        catch { }
+
+        try
+        {
+            calendarLayout.Controls.Add(planner, 1, 0);
+        }
+        catch { }
+
+        try
+        {
+            if(rightYearsPanel is not null) calendarLayout.Controls.Add(rightYearsPanel, 2, 0);
+        }
+        catch { }
+
+        rightPanel.Controls.Add(calendarLayout);
 
         // Only add the right panel to the tab page — the left panel is part of the main form
         page.Controls.Add(rightPanel);
@@ -2211,18 +2594,21 @@ public sealed partial class MainForm : Form
         return viewMode switch
         {
             CalendarViewMode.Day => _data.Tasks.Where(task => TaskOccursInRange(task, selectedDate.Date, selectedDate.Date.AddDays(1)))
-            .OrderBy(TaskPriority)
-            .ThenBy(task => task.Completed).ThenBy(task => task.Title),
+                .OrderBy(TaskPriority)
+                .ThenBy(task => task.Completed).ThenBy(task => task.Title),
+
             CalendarViewMode.Week => _data.Tasks.Where(task => TaskOccursInRange(task, StartOfWeek(selectedDate), StartOfWeek(selectedDate)
-            .AddDays(7))).OrderBy(TaskPriority)
-            .ThenBy(task => task.Completed)
-            .ThenBy(task => task.Title),
+                .AddDays(7))).OrderBy(TaskPriority)
+                .ThenBy(task => task.Completed)
+                .ThenBy(task => task.Title),
+
             CalendarViewMode.Month => _data.Tasks.Where(task => TaskOccursInRange(task, new DateTime(selectedDate.Year, selectedDate.Month, 1), new DateTime(selectedDate.Year, selectedDate.Month, 1)
-            .AddMonths(1)))
-            .OrderBy(TaskPriority).ThenBy(task => task.Completed).ThenBy(task => task.Title),
+                .AddMonths(1)))
+                .OrderBy(TaskPriority).ThenBy(task => task.Completed)
+                .ThenBy(task => task.Title),
             _ => _data.Tasks.OrderBy(TaskPriority)
-            .ThenBy(task => task.Completed)
-            .ThenBy(task => task.Title)
+                .ThenBy(task => task.Completed)
+                .ThenBy(task => task.Title)
         };
     }
 
@@ -2375,8 +2761,8 @@ public sealed partial class MainForm : Form
         {
             if(dragStart is not Point start || dragItem is null || e.Button != MouseButtons.Left) return;
 
-            var dragSize = SystemInformation.DragSize;
-            var dragRectangle = new Rectangle(
+            Size dragSize = SystemInformation.DragSize;
+            Rectangle dragRectangle = new(
                 start.X - dragSize.Width / 2,
                 start.Y - dragSize.Height / 2,
                 dragSize.Width,
@@ -2384,15 +2770,13 @@ public sealed partial class MainForm : Form
 
             if(dragRectangle.Contains(e.Location)) return;
 
-            var itemToDelete = dragItem;
-            var payload = new TrashDropPayload(itemToDelete, () =>
+            T? itemToDelete = dragItem;
+            TrashDropPayload? payload = new(itemToDelete, () =>
             {
                 ((SortableBindingList<T>)source.DataSource).Remove(itemToDelete);
                 _store.Save(_data);
-                if(itemToDelete is OrganizerTask)
-                {
-                    _refreshCalendar();
-                }
+
+                if(itemToDelete is OrganizerTask) _refreshCalendar();
             });
 
             dragStart = null;
@@ -2409,14 +2793,14 @@ public sealed partial class MainForm : Form
             dragItem = null;
         };
 
-        var addButton = new Button { Text = "Add", Width = 90 };
-        var editButton = new Button { Text = "Edit", Width = 90 };
-        var deleteButton = new Button { Text = "Delete", Width = 90 };
-        var saveButton = new Button { Text = "Save", Width = 90 };
+        Button? addButton = new() { Text = "Add", Width = 90 };
+        Button? editButton = new() { Text = "Edit", Width = 90 };
+        Button? deleteButton = new() { Text = "Delete", Width = 90 };
+        Button? saveButton = new() { Text = "Save", Width = 90 };
 
         addButton.Click += (_, _) =>
         {
-            var item = new T();
+            T? item = new();
 
             if(RecordEditorDialog.Edit(this, item, $"Add {Singular(title)}"))
             {
@@ -2442,7 +2826,7 @@ public sealed partial class MainForm : Form
             MessageBox.Show(this, "Saved.", "Organizer", MessageBoxButtons.OK, MessageBoxIcon.Information);
         };
 
-        var buttonPanel = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 42, Padding = new Padding(8), FlowDirection = FlowDirection.LeftToRight };
+        FlowLayoutPanel? buttonPanel = new() { Dock = DockStyle.Top, Height = 42, Padding = new Padding(8), FlowDirection = FlowDirection.LeftToRight };
         buttonPanel.Controls.AddRange([addButton, editButton, deleteButton, saveButton]);
         page.Controls.Add(grid);
         page.Controls.Add(buttonPanel);
@@ -2464,11 +2848,12 @@ public sealed partial class MainForm : Form
 
     private TabPage BuildNotepadTab()
     {
-        var page = new TabPage("Notepad");
-        var source = new BindingSource { DataSource = new SortableBindingList<Note>(_data.Notes) };
+        TabPage? page = new() { Text = "Notepad" };
+        BindingSource? source = new() { DataSource = new SortableBindingList<Note>(_data.Notes) };
+
         _sectionSources["Notepad"] = source;
 
-        var tree = new TreeView
+        TreeView? tree = new()
         {
             Dock = DockStyle.Fill,
             HideSelection = false,
@@ -2476,9 +2861,9 @@ public sealed partial class MainForm : Form
             AllowDrop = true
         };
 
-        var titleBox = new TextBox { Dock = DockStyle.Top, Height = 24, Margin = new Padding(0, 0, 0, 6) };
-        var updatedLabel = new Label { Dock = DockStyle.Top, Height = 22, TextAlign = ContentAlignment.MiddleLeft };
-        var bodyBox = new RichTextBox
+        TextBox? titleBox = new() { Dock = DockStyle.Top, Height = 24, Margin = new Padding(0, 0, 0, 6) };
+        Label? updatedLabel = new() { Dock = DockStyle.Top, Height = 22, TextAlign = ContentAlignment.MiddleLeft };
+        RichTextBox? bodyBox = new()
         {
             Dock = DockStyle.Fill,
             ScrollBars = RichTextBoxScrollBars.Vertical,
@@ -2487,7 +2872,7 @@ public sealed partial class MainForm : Form
             DetectUrls = true
         };
 
-        var loadingNote = false;
+        bool loadingNote = false;
 
         void RebuildNotebookTree(Note? selectNote = null)
         {
@@ -2523,10 +2908,7 @@ public sealed partial class MainForm : Form
 
             tree.ExpandAll();
 
-            if(selectNote is not null)
-            {
-                tree.SelectedNode = FindNoteNode(tree.Nodes, selectNote);
-            }
+            if(selectNote is not null) tree.SelectedNode = FindNoteNode(tree.Nodes, selectNote);
 
             tree.EndUpdate();
         }
@@ -2716,7 +3098,7 @@ public sealed partial class MainForm : Form
         };
 
         var buttonPanel = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 42, Padding = new Padding(8), FlowDirection = FlowDirection.LeftToRight };
-        buttonPanel.Controls.AddRange([addButton, addChapterButton, deleteButton, saveButton]);
+        buttonPanel.Controls.AddRange(new Control[] { addButton, addChapterButton, deleteButton, saveButton });
 
         var leftPanel = new Panel { Dock = DockStyle.Left, Width = 260, Padding = new Padding(8) };
         leftPanel.Controls.Add(tree);
@@ -2774,7 +3156,7 @@ public sealed partial class MainForm : Form
 
         siblings.Insert(Math.Clamp(insertIndex, 0, siblings.Count), draggedNote);
 
-        for(var index = 0; index < siblings.Count; index++)
+        for(int index = 0; index < siblings.Count; index++)
         {
             siblings[index].SortOrder = index;
         }

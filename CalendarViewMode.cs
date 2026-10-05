@@ -3,6 +3,11 @@ namespace Organizer;
 internal enum CalendarViewMode
 {
     Day,
+    TwoDay,
     Week,
-    Month
+    WorkWeek,
+    WeekPerPage,
+    WeeklyTimeSlot,
+    Month,
+    Year
 }

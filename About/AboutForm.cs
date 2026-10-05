@@ -32,7 +32,6 @@ public partial class AboutForm : Form
         lblBuild.Text = $"Built {GetBuildDate():yyyy-MM-dd HH:mm}";
     }
 
-
     /// <summary>
     /// Loads the contributor credits into the credits control.
     /// </summary>
@@ -43,11 +42,27 @@ public partial class AboutForm : Form
         if(!File.Exists(file)) return;
 
         ContributorList? credits = JsonSerializer.Deserialize<ContributorList>(File.ReadAllText(file));
+        List<string> lines = ["CONTRIBUTORS", ""];
 
-        List<string> lines = ["CONTRIBUTORS", "",];
+        // Local helper: extract the last name from a full name string.
+        static string ExtractLastName(string fullName)
+        {
+            if(string.IsNullOrWhiteSpace(fullName)) return string.Empty;
+
+            string[]? parts = fullName.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+            return parts.Length == 0 ? string.Empty : parts[^1];
+        }
+
+        // Sort contributors by last name (derived from the Name field) and then by full name.
+        List<Contributor>? contributors = credits?.Contributors ?? [];
+        List<Contributor>? sorted = contributors
+            .OrderBy(c => ExtractLastName(c.Name), StringComparer.OrdinalIgnoreCase)
+            .ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
         // Add each contributor's role and name to the lines list, followed by an empty line for spacing.
-        foreach(Contributor contributor in credits.Contributors)
+        foreach(Contributor contributor in sorted)
         {
             lines.Add(contributor.Role);
             lines.Add(contributor.Name);

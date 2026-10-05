@@ -192,7 +192,7 @@ internal sealed class ContactEditorDialog : DialogBase
         topRow.Controls.Add(cmbSuffix, 9, 0);
 
         // Tab control setup
-        tabControl.TabPages.AddRange([tabWork, tabHome, tabGeneral]);
+        tabControl.TabPages.AddRange(new TabPage[] { tabWork, tabHome, tabGeneral });
 
         // Work tab layout: split left (details) and right (phones + scheduling)
         TableLayoutPanel? workSplit = new() { Dock = DockStyle.Fill, ColumnCount = 2 };
@@ -430,9 +430,9 @@ internal sealed class ContactEditorDialog : DialogBase
         Controls.Add(outer);
 
         // Populate title/suffix lists with common values
-        cmbTitle.Items.AddRange(["", "Mr.", "Mrs.", "Miss", "Ms.", "Dr.", "Prof.", "Fr.", "Rev", "Herr", "Frl", "M.", "Mme.", "Mlle"]);
-        cmbSuffix.Items.AddRange(["", "Jr.", "Sr.", "II", "III"]);
-        cmbCategories.Items.AddRange(["", "Friend", "Family", "Business"]);
+        cmbTitle.Items.AddRange(new object[] { "", "Mr.", "Mrs.", "Miss", "Ms.", "Dr.", "Prof.", "Fr.", "Rev", "Herr", "Frl", "M.", "Mme.", "Mlle" });
+        cmbSuffix.Items.AddRange(new object[] { "", "Jr.", "Sr.", "II", "III" });
+        cmbCategories.Items.AddRange(new object[] { "", "Friend", "Family", "Business" });
 
         // Set form Accept/Cancel buttons
         AcceptButton = btnOk;

@@ -52,7 +52,7 @@ public sealed partial class AppointmentAlarmDialog : DialogBase
         _unit.Items.AddRange(["Minutes", "Hours", "Days"]);
         _tune.Items.AddRange(["Default", "Chime", "Ding", "Notify"]);
 
-        Panel? body = new Panel
+        Panel? body = new()
         {
             Dock = DockStyle.Fill,
             Padding = new Padding(12)
@@ -100,6 +100,7 @@ public sealed partial class AppointmentAlarmDialog : DialogBase
         Button? okButton = new() { Text = "OK", DialogResult = DialogResult.OK, Width = 82 };
         Button? cancelButton = new() { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 82 };
         Button? helpButton = new() { Text = "&Help", Width = 82 };
+
         okButton.Click += (_, _) => SaveValues();
         helpButton.Click += (_, _) => ShowNotImplemented("Help");
 
@@ -169,7 +170,7 @@ public sealed partial class AppointmentAlarmDialog : DialogBase
 
     private static void SelectItem(ComboBox control, string value)
     {
-        var index = control.Items.Cast<object>().Select(item => item.ToString() ?? string.Empty).ToList().FindIndex(item => item.Equals(value, StringComparison.OrdinalIgnoreCase));
+        int index = control.Items.Cast<object>().Select(item => item.ToString() ?? string.Empty).ToList().FindIndex(item => item.Equals(value, StringComparison.OrdinalIgnoreCase));
         control.SelectedIndex = index >= 0 ? index : 0;
     }
 

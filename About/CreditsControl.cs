@@ -9,7 +9,7 @@ namespace Organizer.About;
 public class CreditsControl : Control
 {
     private readonly System.Windows.Forms.Timer timer = new();  // Timer for controlling the scrolling speed of the credits
-    private readonly List<string> lines = [];             // List of credit lines to be displayed
+    private readonly List<string> lines = [];               // List of credit lines to be displayed
     private float offsetY;                                          // Current vertical offset for scrolling the credits
 
     [DefaultValue(1.0f)]                                      // Speed at which the credits scroll vertically

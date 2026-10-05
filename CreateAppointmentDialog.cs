@@ -36,7 +36,7 @@ public sealed partial class CreateAppointmentDialog : DialogBase
     private readonly CheckBox _confidential = new() { Text = "Con&fidential", AutoSize = true };
 
     public CreateAppointmentDialog()
-        : this(new CalendarEvent(), "Create Appointment", [])
+        : this(new CalendarEvent(), "Create Appointment", Array.Empty<CalendarEvent>())
     {
     }
 
@@ -44,7 +44,7 @@ public sealed partial class CreateAppointmentDialog : DialogBase
     {
         InitializeComponent();
         _appointment = appointment;
-        _allAppointments = allAppointments ?? [];
+        _allAppointments = allAppointments ?? Array.Empty<CalendarEvent>();
 
         if(LicenseManager.UsageMode == LicenseUsageMode.Designtime) return;
 
@@ -61,7 +61,7 @@ public sealed partial class CreateAppointmentDialog : DialogBase
         FormBorderStyle = FormBorderStyle.FixedDialog;
 
         _categories.DropDownStyle = ComboBoxStyle.DropDown;
-        _categories.Items.AddRange(["Business", "Personal", "Holiday", "Travel", "Phone Call", "Meeting"]);
+        _categories.Items.AddRange(new object[] { "Business", "Personal", "Holiday", "Travel", "Phone Call", "Meeting" });
         LoadDurationValues();
 
         TableLayoutPanel? body = new()
@@ -83,7 +83,7 @@ public sealed partial class CreateAppointmentDialog : DialogBase
         AddRow(body, 2, "&Categories", _categories);
 
         FlowLayoutPanel? flags = new() { FlowDirection = FlowDirection.LeftToRight, AutoSize = true, Dock = DockStyle.Fill };
-        flags.Controls.AddRange([_warnOfConflicts, _pencilIn, _confidential]);
+        flags.Controls.AddRange(new Control[] { _warnOfConflicts, _pencilIn, _confidential });
         body.Controls.Add(flags, 1, 3);
 
         Button? linkButton = new() { Text = "Link to", Width = 90 };
@@ -112,7 +112,7 @@ public sealed partial class CreateAppointmentDialog : DialogBase
         buttons.Controls.Add(okButton);
         buttons.Controls.Add(cancelButton);
         buttons.Controls.Add(new Panel { Width = 82, Height = okButton.Height });
-        buttons.Controls.AddRange([inviteButton, findTimeButton, alarmButton, repeatButton, costButton, helpButton]);
+        buttons.Controls.AddRange(new Control[] { inviteButton, findTimeButton, alarmButton, repeatButton, costButton, helpButton });
 
         AcceptButton = okButton;
         CancelButton = cancelButton;

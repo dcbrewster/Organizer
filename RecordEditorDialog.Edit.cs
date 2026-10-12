@@ -9,12 +9,12 @@ namespace Organizer
             if(record is not null)
             {
                 Type t = record.GetType();
-                bool looksLikeContact = t.Name.IndexOf("Contact", StringComparison.OrdinalIgnoreCase) >= 0
+                bool looksLikeContact = t.Name.Contains("Contact", StringComparison.OrdinalIgnoreCase)
                     || (t.GetProperty("Name") is not null && t.GetProperty("Email") is not null);
 
                 if(looksLikeContact)
                 {
-                    using var dlg = new ContactEditorDialog(record, title ?? "Edit Contact");
+                    using ContactEditorDialog? dlg = new(record, title ?? "Edit Contact");
 
                     return dlg.ShowDialog(owner) == DialogResult.OK;
                 }

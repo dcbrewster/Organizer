@@ -14,6 +14,7 @@
 	<ApplicationIcon>images\Organizer.ico</ApplicationIcon>
 	<PackageReadmeFile>README.md</PackageReadmeFile>
 	<SupportedOSPlatformVersion>7.0</SupportedOSPlatformVersion>
+	<Title>Organizer</Title>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
@@ -46,6 +47,11 @@
 
   <ItemGroup>
     <None Include="Organizer.Tests\Organizer.Tests.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CsvHelper" Version="33.1.0" />
+    <PackageReference Include="Ical.Net" Version="5.2.3" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using Organizer.Models;
 
 namespace Organizer;
 

@@ -192,7 +192,7 @@ internal sealed class ContactEditorDialog : DialogBase
         topRow.Controls.Add(cmbSuffix, 9, 0);
 
         // Tab control setup
-        tabControl.TabPages.AddRange([tabWork, tabHome, tabGeneral]);
+        tabControl.TabPages.AddRange(new TabPage[] { tabWork, tabHome, tabGeneral });
 
         // Work tab layout: split left (details) and right (phones + scheduling)
         TableLayoutPanel? workSplit = new() { Dock = DockStyle.Fill, ColumnCount = 2 };
@@ -430,9 +430,9 @@ internal sealed class ContactEditorDialog : DialogBase
         Controls.Add(outer);
 
         // Populate title/suffix lists with common values
-        cmbTitle.Items.AddRange(["", "Mr.", "Mrs.", "Miss", "Ms.", "Dr.", "Prof.", "Fr.", "Rev", "Herr", "Frl", "M.", "Mme.", "Mlle"]);
-        cmbSuffix.Items.AddRange(["", "Jr.", "Sr.", "II", "III"]);
-        cmbCategories.Items.AddRange(["", "Friend", "Family", "Business"]);
+        cmbTitle.Items.AddRange(new object[] { "", "Mr.", "Mrs.", "Miss", "Ms.", "Dr.", "Prof.", "Fr.", "Rev", "Herr", "Frl", "M.", "Mme.", "Mlle" });
+        cmbSuffix.Items.AddRange(new object[] { "", "Jr.", "Sr.", "II", "III" });
+        cmbCategories.Items.AddRange(new object[] { "", "Friend", "Family", "Business" });
 
         // Set form Accept/Cancel buttons
         AcceptButton = btnOk;
@@ -622,7 +622,9 @@ internal sealed class ContactEditorDialog : DialogBase
         bool SetIfWritable(string propName, object? val)
         {
             PropertyInfo? p = t.GetProperty(propName);
-            if(p is null || !p.CanWrite) return true; // nothing to do -> not a failure
+
+            if(p?.CanWrite != true) return true; // nothing to do -> not a failure
+
             try
             {
                 if(val is null)
@@ -683,7 +685,16 @@ internal sealed class ContactEditorDialog : DialogBase
             anySetFailed |= !SetIfWritable("Title", cmbTitle.Text);
             anySetFailed |= !SetIfWritable("MiddleName", string.IsNullOrWhiteSpace(txtMiddleName.Text) ? null : txtMiddleName.Text);
             anySetFailed |= !SetIfWritable("Suffix", cmbSuffix.Text);
-            try { _propCompany?.SetValue(_record, string.IsNullOrWhiteSpace(txtCompany.Text) ? null : txtCompany.Text); } catch { anySetFailed = true; }
+
+            try
+            {
+                _propCompany?.SetValue(_record, string.IsNullOrWhiteSpace(txtCompany.Text) ? null : txtCompany.Text);
+            }
+            catch
+            {
+                anySetFailed = true;
+            }
+
             anySetFailed |= !SetIfWritable("JobTitle", string.IsNullOrWhiteSpace(txtJobTitle.Text) ? null : txtJobTitle.Text);
             anySetFailed |= !SetIfWritable("Email", string.IsNullOrWhiteSpace(txtEmail.Text) ? null : txtEmail.Text);
             anySetFailed |= !SetIfWritable("WorkPhone", string.IsNullOrWhiteSpace(txtWorkPhone.Text) ? null : txtWorkPhone.Text);
@@ -694,8 +705,25 @@ internal sealed class ContactEditorDialog : DialogBase
             anySetFailed |= !SetIfWritable("WorkPhone2", string.IsNullOrWhiteSpace(txtWorkPhone2.Text) ? null : txtWorkPhone2.Text);
             anySetFailed |= !SetIfWritable("WorkPhone3", string.IsNullOrWhiteSpace(txtWorkPhone3.Text) ? null : txtWorkPhone3.Text);
             anySetFailed |= !SetIfWritable("WorkPhone4", string.IsNullOrWhiteSpace(txtWorkPhone4.Text) ? null : txtWorkPhone4.Text);
-            try { _propPhone?.SetValue(_record, string.IsNullOrWhiteSpace(txtHomePhone.Text) ? null : txtHomePhone.Text); } catch { anySetFailed = true; }
-            try { _propAddress?.SetValue(_record, string.IsNullOrWhiteSpace(txtAddress.Text) ? null : txtAddress.Text); } catch { anySetFailed = true; }
+
+            try
+            {
+                _propPhone?.SetValue(_record, string.IsNullOrWhiteSpace(txtHomePhone.Text) ? null : txtHomePhone.Text);
+            }
+            catch
+            {
+                anySetFailed = true;
+            }
+
+            try
+            {
+                _propAddress?.SetValue(_record, string.IsNullOrWhiteSpace(txtAddress.Text) ? null : txtAddress.Text);
+            }
+            catch
+            {
+                anySetFailed = true;
+            }
+
             anySetFailed |= !SetIfWritable("City", string.IsNullOrWhiteSpace(txtCity.Text) ? null : txtCity.Text);
             anySetFailed |= !SetIfWritable("State", string.IsNullOrWhiteSpace(txtState.Text) ? null : txtState.Text);
             anySetFailed |= !SetIfWritable("Zip", string.IsNullOrWhiteSpace(txtZip.Text) ? null : txtZip.Text);
@@ -705,7 +733,16 @@ internal sealed class ContactEditorDialog : DialogBase
             anySetFailed |= !SetIfWritable("Department", string.IsNullOrWhiteSpace(txtDept.Text) ? null : txtDept.Text);
             anySetFailed |= !SetIfWritable("Assistant", string.IsNullOrWhiteSpace(txtAssistant.Text) ? null : txtAssistant.Text);
             anySetFailed |= !SetIfWritable("Categories", string.IsNullOrWhiteSpace(cmbCategories.Text) ? null : cmbCategories.Text);
-            try { if(_propNotes is not null) _propNotes.SetValue(_record, string.IsNullOrWhiteSpace(txtNotesBox.Text) ? null : txtNotesBox.Text); } catch { anySetFailed = true; }
+
+            try
+            {
+                _propNotes?.SetValue(_record, string.IsNullOrWhiteSpace(txtNotesBox.Text) ? null : txtNotesBox.Text);
+            }
+            catch
+            {
+                anySetFailed = true;
+            }
+
             anySetFailed |= !SetIfWritable("EmailWork", string.IsNullOrWhiteSpace(cmbEmailWork.Text) ? null : cmbEmailWork.Text);
             anySetFailed |= !SetIfWritable("BusyTime", string.IsNullOrWhiteSpace(txtBusyTime.Text) ? null : txtBusyTime.Text);
             anySetFailed |= !SetIfWritable("Confidential", chkConfidential.Checked);
@@ -726,8 +763,19 @@ internal sealed class ContactEditorDialog : DialogBase
             anySetFailed |= !SetIfWritable("HomePhone2", string.IsNullOrWhiteSpace(txtHomePhone2.Text) ? null : txtHomePhone2.Text);
             // General tab persistence
             anySetFailed |= !SetIfWritable("Nickname", string.IsNullOrWhiteSpace(txtNickname.Text) ? null : txtNickname.Text);
-            try { anySetFailed |= !SetIfWritable("Birthday", dtpBirthday.Value); } catch { }
-            try { anySetFailed |= !SetIfWritable("Anniversary", dtpAnniversary.Value); } catch { }
+
+            try
+            {
+                anySetFailed |= !SetIfWritable("Birthday", dtpBirthday.Value);
+            }
+            catch { }
+
+            try
+            {
+                anySetFailed |= !SetIfWritable("Anniversary", dtpAnniversary.Value);
+            }
+            catch { }
+
             anySetFailed |= !SetIfWritable("Spouse", string.IsNullOrWhiteSpace(txtSpouse.Text) ? null : txtSpouse.Text);
             anySetFailed |= !SetIfWritable("Children", string.IsNullOrWhiteSpace(txtChildren.Text) ? null : txtChildren.Text);
             anySetFailed |= !SetIfWritable("OnlineName", string.IsNullOrWhiteSpace(txtOnlineName.Text) ? null : txtOnlineName.Text);

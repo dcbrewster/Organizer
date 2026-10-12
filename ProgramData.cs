@@ -1,20 +1,16 @@
+using Organizer.Models;
+
 namespace Organizer;
 
 public sealed class ProgramData
 {
-    public OrganizerData Data { get; private set; }
+    public OrganizerData Data { get; }
 
     private readonly AppDataStore _store = new();
 
-    private ProgramData()
-    {
-        Data = _store.Load();
-    }
+    private ProgramData() => Data = _store.Load();
 
     public static ProgramData Instance { get; } = new ProgramData();
 
-    public void Save()
-    {
-        _store.Save(Data);
-    }
+    public void Save() => _store.Save(Data);
 }

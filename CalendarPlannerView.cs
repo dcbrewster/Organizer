@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Globalization;
+using Organizer.Models;
 
 namespace Organizer;
 
@@ -7,8 +8,8 @@ internal sealed class CalendarPlannerView : Control
 {
     private const int TimeGutter = 0;
     private const int DayHeaderHeight = 28;
-    private readonly Dictionary<Rectangle, CalendarEvent> _eventBounds = new();
-    private readonly Dictionary<Rectangle, OrganizerTask> _taskBounds = new();
+    private readonly Dictionary<Rectangle, CalendarEvent> _eventBounds = new Dictionary<Rectangle, CalendarEvent>();
+    private readonly Dictionary<Rectangle, OrganizerTask> _taskBounds = new Dictionary<Rectangle, OrganizerTask>();
     private readonly Font _smallFont;
     private readonly Font _boldFont;
     private CalendarEvent? _selectedEvent;
@@ -30,7 +31,8 @@ internal sealed class CalendarPlannerView : Control
 
     private void DrawYear(Graphics g, Rectangle content, Brush headerBrush, Pen borderPen, Pen lightPen)
     {
-        int cols = 3, rows = 4;
+        int cols = 3;
+        int rows = 4;
         int gap = 8;
         int cellW = Math.Max(1, content.Width / cols);
         int cellH = Math.Max(1, content.Height / rows);
@@ -68,7 +70,7 @@ internal sealed class CalendarPlannerView : Control
         {
             string d = CultureInfo.CurrentCulture.DateTimeFormat.AbbreviatedDayNames[(c + (int)WeekStarts) % 7];
             Rectangle hdr = new(area.Left + c * colW, area.Top, colW, dayHeaderHeight);
-            TextRenderer.DrawText(g, d.Substring(0, 1), _smallFont, hdr, ForeColor, TextFormatFlags.Right | TextFormatFlags.VerticalCenter);
+            TextRenderer.DrawText(g, d[..1], _smallFont, hdr, ForeColor, TextFormatFlags.Right | TextFormatFlags.VerticalCenter);
         }
 
         for(int r = 0; r < weeks; r++)
@@ -152,11 +154,11 @@ internal sealed class CalendarPlannerView : Control
 
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public IReadOnlyList<CalendarEvent> Events { get; set; } = Array.Empty<CalendarEvent>();
+    public new IReadOnlyList<CalendarEvent> Events { get; set; } = Array.Empty<CalendarEvent>();
 
     [Browsable(false)]
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public IReadOnlyList<OrganizerTask> Tasks { get; set; } = Array.Empty<OrganizerTask>();
+    public new IReadOnlyList<OrganizerTask> Tasks { get; set; } = Array.Empty<OrganizerTask>();
 
     public event EventHandler<CalendarEvent>? EventSelected;
 

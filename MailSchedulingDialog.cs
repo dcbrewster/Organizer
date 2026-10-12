@@ -1,6 +1,7 @@
 using System.Windows.Forms;
 using System.Drawing;
 using System.Collections.Generic;
+using Organizer.Models;
 
 namespace Organizer;
 
@@ -78,7 +79,7 @@ public sealed class MailSchedulingDialog : DialogBase
     {
         // Top-level mail program combo and protocol radios
         _mailProgramCombo = new ComboBox { Location = new Point(12, 12), Width = 300, DropDownStyle = ComboBoxStyle.DropDownList };
-        _mailProgramCombo.Items.AddRange(new object[] { "Windows Live Hotmail", "Microsoft Outlook", "Default e-mail program" });
+        _mailProgramCombo.Items.AddRange(["Windows Live Hotmail", "Microsoft Outlook", "Default e-mail program"]);
 
         _mapiRadio = new RadioButton { Text = "Mail client's simple MAPI", Location = new Point(12, 44), AutoSize = true };
         _pop3Radio = new RadioButton { Text = "POP3 (may combine with MAPI)", Location = new Point(12, 64), AutoSize = true };
@@ -97,7 +98,7 @@ public sealed class MailSchedulingDialog : DialogBase
         TabPage? autoProcessTab = new("Auto-process");
         TabPage? busyTimeTab = new("Busy time");
 
-        _tabs.TabPages.AddRange(new TabPage[] { mailTab, schedulingTab, connectionsTab, autoProcessTab, busyTimeTab });
+        _tabs.TabPages.AddRange([mailTab, schedulingTab, connectionsTab, autoProcessTab, busyTimeTab]);
 
         // Mail tab contents (default from / signature)
         _fromText = new TextBox { Location = new Point(12, 12), Width = 300, PlaceholderText = "Default From address" };
@@ -130,7 +131,7 @@ public sealed class MailSchedulingDialog : DialogBase
         _checkInbox = new CheckBox { Text = "Check my inbox every", Location = new Point(12, 12), AutoSize = true };
         _checkInboxMinutes = new NumericUpDown { Location = new Point(160, 12), Minimum = 0, Maximum = 1440, Value = 15, Enabled = false };
         _tuneCombo = new ComboBox { Location = new Point(12, 44), Width = 260, DropDownStyle = ComboBoxStyle.DropDownList, Enabled = false };
-        _tuneCombo.Items.AddRange(new object[] { "(None)", "1812 Overture", "Alarm Clock", "Arpeggio", "Bach", "Beep", "Beethoven", "Big Ben", "Digital", "Silent", "Wedding" });
+        _tuneCombo.Items.AddRange(["(None)", "1812 Overture", "Alarm Clock", "Arpeggio", "Bach", "Beep", "Beethoven", "Big Ben", "Digital", "Silent", "Wedding"]);
         _playTune = new Button { Text = "Play", Location = new Point(280, 44), Size = new Size(60, 24), Enabled = false };
         _lastMeetingNoticePicker = new DateTimePicker { Location = new Point(12, 80), Width = 220, Format = DateTimePickerFormat.Custom, CustomFormat = "M/d/yyyy h:mm tt" };
         _requestConfirmation = new CheckBox { Text = "Request confirmation before processing meeting notices", Location = new Point(12, 112), AutoSize = true };
@@ -295,7 +296,7 @@ public sealed class MailSchedulingDialog : DialogBase
         prefs.OrganizerFilePath = _organizerFilePathLabel.Text ?? string.Empty;
         prefs.SchedulingName = _schedulingName.Text ?? string.Empty;
         prefs.SchedulingEmail = _schedulingEmail.Text ?? string.Empty;
-        prefs.SchedulingForwardingAddresses = new List<string>();
+        prefs.SchedulingForwardingAddresses = [];
 
         foreach(var item in _forwardingAddressesList.Items)
             prefs.SchedulingForwardingAddresses.Add(item?.ToString() ?? string.Empty);

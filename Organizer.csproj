@@ -14,6 +14,7 @@
 	<ApplicationIcon>images\Organizer.ico</ApplicationIcon>
 	<PackageReadmeFile>README.md</PackageReadmeFile>
 	<SupportedOSPlatformVersion>7.0</SupportedOSPlatformVersion>
+	<Title>Organizer</Title>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">

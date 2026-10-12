@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Drawing.Printing;
 using System.Text;
 using Organizer.About;
+using Organizer.Models;
 
 namespace Organizer;
 
@@ -461,7 +462,7 @@ public sealed partial class MainForm : Form
             try
             {
                 // Record current visibility for later restore but don't hide them immediately; hiding will occur when animation completes to avoid layout side-effects.
-                _leftPanelChildVisibility = new Dictionary<Control, bool>();
+                _leftPanelChildVisibility = [];
 
                 foreach(Control c in designerCalendarLeftPanel.Controls)
                 {
@@ -476,7 +477,12 @@ public sealed partial class MainForm : Form
                 }
 
                 int glyphWidth = 24;
-                try { if(_binderToggleLabel is not null && _binderToggleLabel.PreferredSize.Width > 0) glyphWidth = Math.Max(24, _binderToggleLabel.PreferredSize.Width + 8); } catch { }
+
+                try
+                {
+                    if(_binderToggleLabel?.PreferredSize.Width > 0) glyphWidth = Math.Max(24, _binderToggleLabel.PreferredSize.Width + 8);
+                }
+                catch { }
 
                 StartBinderAnimation(glyphWidth, expanding: false);
             }
@@ -899,11 +905,11 @@ public sealed partial class MainForm : Form
         }
         catch
         {
-            recentFileItems = new ToolStripItem[] { Command("(No recent files)") };
+            recentFileItems = [Command("(No recent files)")];
         }
 
         // Build File menu children and append recent items
-        List<ToolStripItem>? fileChildren = new List<ToolStripItem>() {
+        List<ToolStripItem>? fileChildren = [
             Command("&New\tCtrl+N"),
             Command("&Open\tCtrl+O"),
             Command("&Close\tCtrl+W"),
@@ -925,24 +931,23 @@ public sealed partial class MainForm : Form
             Command("Publis&h as Web Pages..."),
             Separator(),
             Command("&Print...\tCtrl+P"),
-            BuildMenu("&User Setup", new ToolStripItem[] {
+            BuildMenu("&User Setup", [
                 Command("&Organizer Preferences..."),
                 Command("&Printer...\tShift+Ctrl+P"),
                 Command("Mail and &Scheduling..."),
                 Command("Smart&Icons..."),
                 Command("Pass&words...\tCtrl+U"),
                 Command("&Telephone Dialing...")
-            }),
+            ]),
             Separator(),
             Command("E&xit Organizer"),
-            Separator()
-        };
+            Separator(),
+            .. recentFileItems,
+        ];
 
-        fileChildren.AddRange(recentFileItems);
-
-        menu.Items.AddRange(new ToolStripItem[] {
+        menu.Items.AddRange([
             BuildMenu("&File", fileChildren.ToArray()),
-            BuildMenu("&Edit", new ToolStripItem[] {
+            BuildMenu("&Edit", [
                 Command("&Undo\tCtrl+Z"),
                 Separator(),
                 Command("Cu&t\tCtrl+X"),
@@ -962,8 +967,8 @@ public sealed partial class MainForm : Form
                 Command("Find Person via &Internet...\tCtrl+J"),
                 Separator(),
                 Command("OLE Li&nks...")
-            }),
-            BuildMenu("&View", new ToolStripItem[] {
+            ]),
+            BuildMenu("&View", [
                 Command("&1 Day Planner"),
                 Command("&2 Day per Page"),
                 // 3 Multiple Calendar intentionally skipped for now
@@ -982,8 +987,8 @@ public sealed partial class MainForm : Form
                 Command("C&lear Filter"),
                 Separator(),
                 Command("Calendar &Preferences...")
-            }),
-            BuildMenu("&Create", new ToolStripItem[] {
+            ]),
+            BuildMenu("&Create", [
                 Command("&Appointment...\tIns"),
                 BuildMenu("&Entry In", entryInItems),
                 Separator(),
@@ -1001,30 +1006,30 @@ public sealed partial class MainForm : Form
                 Command("&Group of Contacts..."),
                 Command("Street Ma&p..."),
                 Command("Dri&ving Directions...")
-            }),
-            BuildMenu("&Section", new ToolStripItem[] {
+            ]),
+            BuildMenu("&Section", [
                 Command("&Customize..."),
                 Command("&Show Through..."),
                 Command("&Include..."),
                 Separator(),
                 BuildMenu("&Turn To", turnToItems)
-            }),
+            ]),
             appointmentMenu,
-            BuildMenu("&Phone", new ToolStripItem[] {
+            BuildMenu("&Phone", [
                 Command("&Dial...\tCtrl+D"),
                 Command("&Quick Dial...\tCtrl+Q"),
                 Separator(),
                 Command("&Incoming Call..."),
                 Separator(),
                 Command("&Change Area Codes...")
-            }),
-            BuildMenu("&Help", new ToolStripItem[] {
+            ]),
+            BuildMenu("&Help", [
                 Command("&Help Topics"),
                 Command("&Bubble Help\tCtrl+F1"),
                 Separator(),
                 Command("&About Organizer")
-            })
-        });
+            ])
+        ]);
 
         // Wire up click handlers for appointment menu items so they toggle the focused appointment
         // and persist the change immediately.
@@ -1036,7 +1041,7 @@ public sealed partial class MainForm : Form
 
                     try
                     {
-                        _store.Save(_data);
+                        _store.Save(_data!);
                     }
                     catch { }
 
@@ -1053,7 +1058,7 @@ public sealed partial class MainForm : Form
 
                     try
                     {
-                        _store.Save(_data);
+                        _store.Save(_data!);
                     }
                     catch { }
 
@@ -1070,7 +1075,7 @@ public sealed partial class MainForm : Form
 
                     try
                     {
-                        _store.Save(_data);
+                        _store.Save(_data!);
                     }
                     catch { }
 
@@ -1110,8 +1115,8 @@ public sealed partial class MainForm : Form
 
         if(tabIndex >= 0)
         {
-            displayText = text.Substring(0, tabIndex);
-            shortcutText = text.Substring(tabIndex + 1);
+            displayText = text[..tabIndex];
+            shortcutText = text[(tabIndex + 1)..];
         }
 
         ToolStripMenuItem menuItem = new(displayText);
@@ -1219,7 +1224,7 @@ public sealed partial class MainForm : Form
             case string s when s.StartsWith("Turn To ", StringComparison.OrdinalIgnoreCase):
                 try
                 {
-                    string? sectionName = s.Substring("Turn To ".Length);
+                    string? sectionName = s["Turn To ".Length..];
 
                     SelectSection(sectionName);
                 }
@@ -1231,7 +1236,7 @@ public sealed partial class MainForm : Form
             case string s when s.StartsWith("OpenRecent:", StringComparison.OrdinalIgnoreCase):
                 try
                 {
-                    string? path = s.Substring("OpenRecent:".Length);
+                    string? path = s["OpenRecent:".Length..];
 
                     if(File.Exists(path))
                     {
@@ -1783,7 +1788,7 @@ public sealed partial class MainForm : Form
         document.PrintPage += (_, e) =>
         {
             string? text = BuildPrintableSummary();
-            e.Graphics?.DrawString(text, SystemFonts.MessageBoxFont, Brushes.Black, e.MarginBounds);
+            e.Graphics?.DrawString(text, SystemFonts.MessageBoxFont!, Brushes.Black, e.MarginBounds);
         };
 
         return document;
@@ -2253,7 +2258,7 @@ public sealed partial class MainForm : Form
             BackColor = Color.FromArgb(199, 156, 75)
         };
 
-        buttonPanel.Controls.AddRange(new Control[] { previousButton, nextButton });
+        buttonPanel.Controls.AddRange([previousButton, nextButton]);
 
         Control? trashDropTarget = BuildTrashDropTarget();
 
@@ -3097,13 +3102,13 @@ public sealed partial class MainForm : Form
             MessageBox.Show(this, "Saved.", "Organizer", MessageBoxButtons.OK, MessageBoxIcon.Information);
         };
 
-        var buttonPanel = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 42, Padding = new Padding(8), FlowDirection = FlowDirection.LeftToRight };
-        buttonPanel.Controls.AddRange(new Control[] { addButton, addChapterButton, deleteButton, saveButton });
+        FlowLayoutPanel? buttonPanel = new() { Dock = DockStyle.Top, Height = 42, Padding = new Padding(8), FlowDirection = FlowDirection.LeftToRight };
+        buttonPanel.Controls.AddRange([addButton, addChapterButton, deleteButton, saveButton]);
 
-        var leftPanel = new Panel { Dock = DockStyle.Left, Width = 260, Padding = new Padding(8) };
+        Panel? leftPanel = new() { Dock = DockStyle.Left, Width = 260, Padding = new Padding(8) };
         leftPanel.Controls.Add(tree);
 
-        var editorPanel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(10) };
+        Panel? editorPanel = new() { Dock = DockStyle.Fill, Padding = new Padding(10) };
         editorPanel.Controls.Add(bodyBox);
         editorPanel.Controls.Add(updatedLabel);
         editorPanel.Controls.Add(titleBox);
@@ -3264,6 +3269,7 @@ public sealed partial class MainForm : Form
         if(e.Data.GetDataPresent(typeof(int)) && sender is Panel)
         {
             int srcIndex = (int)e.Data.GetData(typeof(int));
+
             // If a tab was dragged, remove that TabPage
             if(_tabs is not null && srcIndex >= 0 && srcIndex < _tabs.TabCount)
             {
@@ -3273,7 +3279,7 @@ public sealed partial class MainForm : Form
 
         if(e.Data.GetDataPresent(typeof(TrashDropPayload)))
         {
-            var payload = e.Data.GetData(typeof(TrashDropPayload)) as TrashDropPayload;
+            TrashDropPayload? payload = e.Data.GetData(typeof(TrashDropPayload)) as TrashDropPayload;
 
             try
             {
